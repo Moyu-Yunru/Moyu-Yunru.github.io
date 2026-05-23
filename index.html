@@ -71,57 +71,6 @@
       <div class="outer">
         <section id="main">
   
-    <article id="post-hello-world" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/05/23/hello-world/" class="article-date">
-  <time class="dt-published" datetime="2026-05-23T07:09:54.779Z" itemprop="datePublished">2026-05-23</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/05/23/hello-world/">Hello World</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>Welcome to <a target="_blank" rel="noopener" href="https://hexo.io/">Hexo</a>! This is your very first post. Check <a target="_blank" rel="noopener" href="https://hexo.io/docs/">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a target="_blank" rel="noopener" href="https://hexo.io/docs/troubleshooting.html">troubleshooting</a> or you can ask me on <a target="_blank" rel="noopener" href="https://github.com/hexojs/hexo/issues">GitHub</a>.</p>
-<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo new <span class="string">&quot;My New Post&quot;</span></span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/writing.html">Writing</a></p>
-<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/server.html">Server</a></p>
-<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/generating.html">Generating</a></p>
-<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/one-command-deployment.html">Deployment</a></p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://moyu-yunru.github.io/2026/05/23/hello-world/" data-id="cuidCRY-TEc1uVzLgIW28dqU2" data-title="Hello World" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
     <article id="post-hexo-github-pages-guide" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2026/05/23/hexo-github-pages-guide/" class="article-date">
@@ -232,14 +181,46 @@
 <li><code>hexo deploy</code>：把生成结果推送到 GitHub。</li>
 </ol>
 <p>推送完成后，进入 GitHub 仓库的 Settings，找到 Pages 页面，确认发布分支设置正确。稍等一会儿，GitHub Pages 就会生成网站地址。</p>
-<h2 id="九、日常写博客流程"><a href="#九、日常写博客流程" class="headerlink" title="九、日常写博客流程"></a>九、日常写博客流程</h2><p>以后每次写新文章，大致流程都是：</p>
+<h2 id="九、一次-GitHub-Pages-构建失败的排查记录"><a href="#九、一次-GitHub-Pages-构建失败的排查记录" class="headerlink" title="九、一次 GitHub Pages 构建失败的排查记录"></a>九、一次 GitHub Pages 构建失败的排查记录</h2><p>第一次部署时，我遇到了一个很典型的问题：<code>hexo deploy</code> 已经把 <code>public/</code> 里的文件推送到了 GitHub 仓库，仓库根目录里也能看到 <code>index.html</code>、<code>css/</code>、<code>js/</code>、<code>archives/</code> 等静态文件，但是浏览器访问：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://moyu-yunru.github.io</span><br></pre></td></tr></table></figure>
+
+<p>页面仍然显示 404：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">There isn&#x27;t a GitHub Pages site here.</span><br></pre></td></tr></table></figure>
+
+<p>当时 GitHub 仓库的 Pages 设置页面显示，站点来源是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">main / (root)</span><br></pre></td></tr></table></figure>
+
+<p>这说明分支和目录看起来是对的。继续查看仓库首页中间的检查状态，发现有一条红色失败提示：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Some checks were not successful</span><br><span class="line">pages build and deployment / build (dynamic) Failing</span><br><span class="line">pages build and deployment / deploy (dynamic) Skipped</span><br><span class="line">pages build and deployment / report-build-status (dynamic) Successful</span><br></pre></td></tr></table></figure>
+
+<p>这说明问题不在于文件没有推送上去，而是 GitHub Pages 的构建流程失败了。</p>
+<blockquote>
+<p>当时两张截图里最关键的信息是：第一张 Pages 设置截图确认了发布来源是 <code>main / (root)</code>；第二张仓库首页截图确认了根目录存在 <code>index.html</code>，但 Pages 的 build 检查失败，所以网站仍然 404。</p>
+</blockquote>
+<p>对于 Hexo 这种已经生成好的静态网站，GitHub Pages 不需要再用 Jekyll 处理一遍。为了告诉 GitHub “直接发布这些静态文件就好”，可以在 Hexo 的 <code>source/</code> 目录下放一个 <code>.nojekyll</code> 文件：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">touch</span> <span class="built_in">source</span>/.nojekyll</span><br></pre></td></tr></table></figure>
+
+<p>然后重新生成并部署：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">hexo clean</span><br><span class="line">hexo generate</span><br><span class="line">hexo deploy</span><br></pre></td></tr></table></figure>
+
+<p>这样 <code>hexo generate</code> 时，<code>.nojekyll</code> 会被复制到 <code>public/</code> 目录；<code>hexo deploy</code> 再把它一起推送到 GitHub。GitHub Pages 看到 <code>.nojekyll</code> 后，就会跳过 Jekyll 处理，直接发布 Hexo 已经生成好的静态网页。</p>
+<p>如果后续再遇到 GitHub Pages 404，可以按这个顺序排查：</p>
+<ol>
+<li>仓库名是否是 <code>用户名.github.io</code>。</li>
+<li>Pages 设置里的分支和目录是否是实际部署的位置，例如 <code>main / (root)</code>。</li>
+<li>仓库根目录是否真的有 <code>index.html</code>。</li>
+<li>Actions 或仓库首页的 Checks 是否有失败项。</li>
+<li>Hexo 静态站点是否包含 <code>.nojekyll</code>。</li>
+</ol>
+<p>这次问题解决后，我更清楚地理解了：<code>hexo deploy</code> 只是把文件推到 GitHub，真正让网站可以访问，还需要 GitHub Pages 成功完成发布流程。</p>
+<h2 id="十、日常写博客流程"><a href="#十、日常写博客流程" class="headerlink" title="十、日常写博客流程"></a>十、日常写博客流程</h2><p>以后每次写新文章，大致流程都是：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">hexo new <span class="string">&quot;文章标题&quot;</span></span><br><span class="line">hexo server</span><br><span class="line">hexo clean</span><br><span class="line">hexo generate</span><br><span class="line">hexo deploy</span><br></pre></td></tr></table></figure>
 
 <p>如果只是想在本地转成 HTML，不需要发布到 GitHub，只运行：</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo generate</span><br></pre></td></tr></table></figure>
 
 <p>然后查看 <code>public/</code> 目录即可。</p>
-<h2 id="十、总结"><a href="#十、总结" class="headerlink" title="十、总结"></a>十、总结</h2><p>Hexo 和 GitHub Pages 的组合非常适合搭建个人博客。Hexo 负责把 Markdown 文章转换成静态网页，GitHub Pages 负责把这些网页托管到互联网上。</p>
+<h2 id="十一、总结"><a href="#十一、总结" class="headerlink" title="十一、总结"></a>十一、总结</h2><p>Hexo 和 GitHub Pages 的组合非常适合搭建个人博客。Hexo 负责把 Markdown 文章转换成静态网页，GitHub Pages 负责把这些网页托管到互联网上。</p>
 <p>可以把整个流程理解成一句话：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">写 Markdown -&gt; Hexo 生成 HTML -&gt; GitHub Pages 发布网站</span><br></pre></td></tr></table></figure>
 
@@ -248,7 +229,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://moyu-yunru.github.io/2026/05/23/hexo-github-pages-guide/" data-id="cuidp46svfi--cy-LVlIrRJ1L" data-title="使用 Hexo 写博客，并发布到 GitHub Pages" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://moyu-yunru.github.io/2026/05/23/hexo-github-pages-guide/" data-id="cuidx5FjNHbYvw5qe1A8LayR6" data-title="使用 Hexo 写博客，并发布到 GitHub Pages" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -312,10 +293,6 @@
     <h3 class="widget-title">Recent Posts</h3>
     <div class="widget">
       <ul>
-        
-          <li>
-            <a href="/2026/05/23/hello-world/">Hello World</a>
-          </li>
         
           <li>
             <a href="/2026/05/23/hexo-github-pages-guide/">使用 Hexo 写博客，并发布到 GitHub Pages</a>
