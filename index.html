@@ -20,11 +20,15 @@
     var CONFIG = {"hostname":"moyu-yunru.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":"gitalk","storage":true,"lazyload":true,"nav":null,"activeClass":"gitalk"},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
   </script>
 
-  <meta property="og:type" content="website">
-<meta property="og:title" content="Libra&#39;s notes">
+  <meta name="description" content="Personal Knowledge Base     Libra&#39;s notes                             阅读文章       查看标签       了解这里                              About     你好，我是 Libra           我是一名计算机硕士，关注后端工程、分布式系统和高并发场景下的系统设计">
+<meta property="og:type" content="website">
+<meta property="og:title" content="首页">
 <meta property="og:url" content="https://moyu-yunru.github.io/index.html">
 <meta property="og:site_name" content="Libra&#39;s notes">
+<meta property="og:description" content="Personal Knowledge Base     Libra&#39;s notes                             阅读文章       查看标签       了解这里                              About     你好，我是 Libra           我是一名计算机硕士，关注后端工程、分布式系统和高并发场景下的系统设计">
 <meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-26T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-05-27T15:26:49.091Z">
 <meta property="article:author" content="Libra">
 <meta name="twitter:card" content="summary">
 
@@ -35,13 +39,13 @@
   // https://hexo.io/docs/variables.html
   CONFIG.page = {
     sidebar: "",
-    isHome : true,
+    isHome : false,
     isPost : false,
     lang   : 'zh-CN'
   };
 </script>
 
-  <title>Libra's notes</title>
+  <title>Libra's notes - A place to record my thoughts</title>
   
 
 
@@ -114,6 +118,11 @@
     <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
 
   </li>
+        <li class="menu-item menu-item-文章">
+
+    <a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>文章</a>
+
+  </li>
         <li class="menu-item menu-item-tags">
 
     <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
@@ -151,580 +160,106 @@
       <div class="main-inner">
         <div class="content-wrap">
           
+  
+  
 
-          <div class="content index posts-expand">
+          <div class="content libra-home-page">
             
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/25/es-bulk-sync-threadpool-backpressure/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/IMG_1578.jpeg">
-      <meta itemprop="name" content="Libra">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Libra's notes">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2026/05/25/es-bulk-sync-threadpool-backpressure/" class="post-title-link" itemprop="url">千万级数据同步到 Elasticsearch：线程池、CountDownLatch 与背压控制</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-              
-
-              <time title="创建时间：2026-05-25 22:56:37 / 修改时间：22:57:52" itemprop="dateCreated datePublished" datetime="2026-05-25T22:56:37+08:00">2026-05-25</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">分类于</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/" itemprop="url" rel="index"><span itemprop="name">学习笔记</span></a>
-                </span>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>项目上线前，经常会遇到一个典型场景：业务数据已经在 MySQL 里沉淀了一段时间，现在需要一次性同步到 Elasticsearch 索引库中，方便后续做搜索和查询。</p>
-<p>如果数据量只有几万条，直接分页同步问题不大。但当数据量来到千万级，比如 1000 万条时，就不能简单地执行一次 <code>SELECT *</code> 把数据全部查出来。这样很容易让 Java 应用端内存被打爆，出现 <code>OOM</code>；同时长时间的大查询也会占住数据库连接，拖慢甚至影响线上数据库。</p>
-<p>比较稳妥的思路是：把大任务拆成很多小批次，再通过线程池并发处理，同时用 <code>CountDownLatch</code> 等待所有批次结束。真正关键的地方不只是“用了多线程”，而是要用有界队列和 <code>CallerRunsPolicy</code> 做背压，让同步速度始终被控制在数据库、应用和 ES 都能承受的范围内。</p>
-<h2 id="一、核心思路：分批读取，并发写入"><a href="#一、核心思路：分批读取，并发写入" class="headerlink" title="一、核心思路：分批读取，并发写入"></a>一、核心思路：分批读取，并发写入</h2><p>千万级数据同步的核心是“分而治之”。</p>
-<p>假设数据库里有 1000 万条数据，每个批次处理 5000 条，那么整个同步任务可以拆成：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">10000000 / 5000 = 2000 个批次任务</span><br></pre></td></tr></table></figure>
-
-<p>主线程只负责计算批次数，并把每个批次包装成一个任务提交给线程池。每个任务内部再完成三件事：</p>
-<ol>
-<li>从数据库读取当前批次的数据。</li>
-<li>把数据库实体转换成 ES 文档。</li>
-<li>通过 ES Bulk API 批量写入索引。</li>
-</ol>
-<p>这里有一个很重要的点：主线程提交给线程池的是任务对象，而不是一次性把 1000 万条数据读进内存。真正的数据读取发生在每个工作线程执行任务时，因此内存里同时存在的数据量会被线程数和批次大小限制住。</p>
-<h2 id="二、整体执行流程"><a href="#二、整体执行流程" class="headerlink" title="二、整体执行流程"></a>二、整体执行流程</h2><p>整个同步过程可以拆成四步。</p>
-<p>第一步，主线程先查询总数据量，并根据 <code>pageSize</code> 计算任务数量：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">totalCount = 10000000</span><br><span class="line">pageSize = 5000</span><br><span class="line">totalTasks = 2000</span><br></pre></td></tr></table></figure>
-
-<p>然后初始化 <code>CountDownLatch</code>：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">CountDownLatch</span> <span class="variable">latch</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">CountDownLatch</span>(totalTasks);</span><br></pre></td></tr></table></figure>
-
-<p>第二步，主线程循环提交任务。每个任务代表一个数据分片，比如：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">任务 1：offset = 0, limit = 5000</span><br><span class="line">任务 2：offset = 5000, limit = 5000</span><br><span class="line">任务 3：offset = 10000, limit = 5000</span><br></pre></td></tr></table></figure>
-
-<p>第三步，线程池里的工作线程并发消费这些任务。每个任务只处理自己的那一小段数据，处理完后在 <code>finally</code> 里执行 <code>latch.countDown()</code>。</p>
-<p>第四步，主线程提交完任务后调用 <code>latch.await()</code> 等待。当所有任务都完成，计数器从 2000 递减到 0，主线程被唤醒，同步流程结束。</p>
-<h2 id="三、代码骨架"><a href="#三、代码骨架" class="headerlink" title="三、代码骨架"></a>三、代码骨架</h2><p>一个简化后的实现大概如下：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">syncDataToES</span><span class="params">()</span> <span class="keyword">throws</span> InterruptedException &#123;</span><br><span class="line">    <span class="type">int</span> <span class="variable">totalCount</span> <span class="operator">=</span> mapper.selectTotalCount();</span><br><span class="line">    <span class="type">int</span> <span class="variable">pageSize</span> <span class="operator">=</span> <span class="number">5000</span>;</span><br><span class="line">    <span class="type">int</span> <span class="variable">totalTasks</span> <span class="operator">=</span> (totalCount + pageSize - <span class="number">1</span>) / pageSize;</span><br><span class="line"></span><br><span class="line">    <span class="type">CountDownLatch</span> <span class="variable">latch</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">CountDownLatch</span>(totalTasks);</span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> <span class="variable">workers</span> <span class="operator">=</span> Runtime.getRuntime().availableProcessors() * <span class="number">2</span>;</span><br><span class="line">    <span class="type">ThreadPoolExecutor</span> <span class="variable">executor</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ThreadPoolExecutor</span>(</span><br><span class="line">            workers,</span><br><span class="line">            workers,</span><br><span class="line">            <span class="number">60L</span>,</span><br><span class="line">            TimeUnit.SECONDS,</span><br><span class="line">            <span class="keyword">new</span> <span class="title class_">LinkedBlockingQueue</span>&lt;&gt;(<span class="number">200</span>),</span><br><span class="line">            <span class="keyword">new</span> <span class="title class_">ThreadFactoryBuilder</span>().setNameFormat(<span class="string">&quot;es-sync-pool-%d&quot;</span>).build(),</span><br><span class="line">            <span class="keyword">new</span> <span class="title class_">ThreadPoolExecutor</span>.CallerRunsPolicy()</span><br><span class="line">    );</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> <span class="variable">i</span> <span class="operator">=</span> <span class="number">0</span>; i &lt; totalTasks; i++) &#123;</span><br><span class="line">        <span class="keyword">final</span> <span class="type">int</span> <span class="variable">offset</span> <span class="operator">=</span> i * pageSize;</span><br><span class="line">        <span class="keyword">final</span> <span class="type">int</span> <span class="variable">limit</span> <span class="operator">=</span> pageSize;</span><br><span class="line"></span><br><span class="line">        executor.execute(() -&gt; &#123;</span><br><span class="line">            <span class="keyword">try</span> &#123;</span><br><span class="line">                List&lt;DataEntity&gt; list = mapper.selectByPage(offset, limit);</span><br><span class="line"></span><br><span class="line">                <span class="keyword">if</span> (CollectionUtils.isNotEmpty(list)) &#123;</span><br><span class="line">                    List&lt;EsDocument&gt; docs = convertToDocuments(list);</span><br><span class="line">                    esService.bulkIndex(docs);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">                log.error(<span class="string">&quot;同步 ES 分片失败, offset=&#123;&#125;, limit=&#123;&#125;&quot;</span>, offset, limit, e);</span><br><span class="line">                recordFailedBatch(offset, limit);</span><br><span class="line">            &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">                latch.countDown();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="type">boolean</span> <span class="variable">finished</span> <span class="operator">=</span> latch.await(<span class="number">2</span>, TimeUnit.HOURS);</span><br><span class="line">    <span class="keyword">if</span> (!finished) &#123;</span><br><span class="line">        log.error(<span class="string">&quot;ES 数据同步超时，部分任务可能未完成&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    executor.shutdown();</span><br><span class="line">    log.info(<span class="string">&quot;ES 数据同步任务结束&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>这段代码里最关键的不是分页查询本身，而是三个控制点：</p>
-<ol>
-<li><code>pageSize</code> 控制单个任务最多读取多少数据。</li>
-<li>有界队列控制最多允许多少任务在内存里排队。</li>
-<li><code>CallerRunsPolicy</code> 在队列满时让主线程自己执行任务，从而自动减速。</li>
-</ol>
-<h2 id="四、为什么它能避免-OOM"><a href="#四、为什么它能避免-OOM" class="headerlink" title="四、为什么它能避免 OOM"></a>四、为什么它能避免 OOM</h2><p>如果直接把 1000 万条数据全部查到内存里，内存压力会集中在一个瞬间爆发。</p>
-<p>分批同步后，内存上限就变得可控。假设线程池有 20 个工作线程，每个批次读取 5000 条数据，那么同一时刻正在被处理的数据大约是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">20 * 5000 = 100000 条</span><br></pre></td></tr></table></figure>
-
-<p>这和一次性加载 1000 万条完全不是一个量级。每个批次处理完成后，局部变量里的数据会失去引用，后续可以被 GC 回收。</p>
-<p>更重要的是，线程池队列必须是有界的。如果队列是无界的，主线程会非常快地把 2000 个任务全部塞进去。虽然任务对象本身不一定很大，但它会让系统失去节奏控制：生产任务的速度远远超过消费速度，后续如果任务里还捕获了上下文对象，就可能把内存慢慢推高。</p>
-<p>有界队列配合 <code>CallerRunsPolicy</code>，就能在消费端变慢时自动压住生产端。</p>
-<h2 id="五、CallerRunsPolicy-的背压控制"><a href="#五、CallerRunsPolicy-的背压控制" class="headerlink" title="五、CallerRunsPolicy 的背压控制"></a>五、CallerRunsPolicy 的背压控制</h2><p><code>CallerRunsPolicy</code> 的逻辑很简单，但效果非常关键。</p>
-<p>当线程池的工作线程都在忙，阻塞队列也满了，主线程再次调用 <code>executor.execute(task)</code> 时，这个任务不会被丢弃，也不会新开无限线程，而是由提交任务的线程自己执行。</p>
-<p>它的核心源码可以理解成这样：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">rejectedExecution</span><span class="params">(Runnable r, ThreadPoolExecutor executor)</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> (!executor.isShutdown()) &#123;</span><br><span class="line">        r.run();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>也就是说，原本只负责提交任务的主线程，会被迫停下来，亲自执行当前这个同步任务。</p>
-<p>这个过程会带来一个天然的时间差：</p>
-<ol>
-<li>主线程执行 <code>executor.execute(task)</code>。</li>
-<li>线程池发现队列已满，触发 <code>CallerRunsPolicy</code>。</li>
-<li>主线程同步执行 <code>task.run()</code>，开始查 MySQL、转换数据、写 ES。</li>
-<li>在主线程执行任务的这段时间里，它无法继续提交新任务。</li>
-<li>线程池里的工作线程仍然在消费队列中的任务。</li>
-<li>主线程执行完当前任务后，<code>executor.execute(task)</code> 返回，继续进入下一轮 <code>for</code> 循环。</li>
-</ol>
-<p>所以主线程不需要额外的通知机制。它执行完 <code>run()</code> 后，代码自然回到原来的循环位置，继续提交下一个任务。</p>
-<p>这就是背压：当 ES 写入变慢、数据库查询变慢、工作线程消费不过来时，主线程提交任务的速度也会自动变慢。</p>
-<p>还有一个细节：即使任务是主线程执行的，也会进入同一段 <code>Runnable</code> 代码，所以 <code>finally</code> 里的 <code>latch.countDown()</code> 同样会执行。只要 <code>countDown()</code> 放在 <code>finally</code> 里，就能避免某个批次异常后主线程一直等待。</p>
-<p>不过生产环境中仍然不建议使用无参的 <code>latch.await()</code>，最好带上超时时间：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">boolean</span> <span class="variable">finished</span> <span class="operator">=</span> latch.await(<span class="number">2</span>, TimeUnit.HOURS);</span><br></pre></td></tr></table></figure>
-
-<p>这样即使出现极端情况，也不会让同步程序永久卡死。</p>
-<h2 id="六、线程池应该怎么选"><a href="#六、线程池应该怎么选" class="headerlink" title="六、线程池应该怎么选"></a>六、线程池应该怎么选</h2><p>这种场景一般使用手动创建的 <code>ThreadPoolExecutor</code>，不建议直接使用 <code>Executors</code> 提供的快捷方法。</p>
-<p>原因在于：</p>
-<ol>
-<li><code>Executors.newFixedThreadPool()</code> 默认使用无界队列，背压很难触发。</li>
-<li><code>Executors.newCachedThreadPool()</code> 可能创建大量线程，容易把压力打到数据库和 ES 上。</li>
-<li>灌数任务需要明确控制线程数、队列长度、线程名称和拒绝策略。</li>
-</ol>
-<p>比较常见的配置是：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> <span class="variable">cpuCores</span> <span class="operator">=</span> Runtime.getRuntime().availableProcessors();</span><br><span class="line"><span class="type">int</span> <span class="variable">workers</span> <span class="operator">=</span> cpuCores * <span class="number">2</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">ThreadPoolExecutor</span> <span class="variable">executor</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ThreadPoolExecutor</span>(</span><br><span class="line">        workers,</span><br><span class="line">        workers,</span><br><span class="line">        <span class="number">60L</span>,</span><br><span class="line">        TimeUnit.SECONDS,</span><br><span class="line">        <span class="keyword">new</span> <span class="title class_">LinkedBlockingQueue</span>&lt;&gt;(<span class="number">200</span>),</span><br><span class="line">        <span class="keyword">new</span> <span class="title class_">ThreadFactoryBuilder</span>().setNameFormat(<span class="string">&quot;es-sync-pool-%d&quot;</span>).build(),</span><br><span class="line">        <span class="keyword">new</span> <span class="title class_">ThreadPoolExecutor</span>.CallerRunsPolicy()</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
-
-<p>这里通常把核心线程数和最大线程数设成一样。因为数据同步是典型的 I&#x2F;O 密集型任务，大量时间花在 MySQL 查询和 ES 网络写入上，线程不一定一直占用 CPU。适当多开一些线程，可以提高整体吞吐。</p>
-<p>队列大小则不能太大，也不能太小。</p>
-<p>如果队列太大，比如 10000，主线程很久都不会触发背压，系统会积压大量任务。如果队列太小，比如 10，又可能导致主线程频繁亲自执行任务，降低并发效率。一般可以从 100 到 500 之间开始压测，再根据数据库、ES 和应用内存表现调整。</p>
-<p>自定义线程名也很重要。线上如果出现同步卡住、ES 写入失败或者数据库连接耗尽，通过 <code>jstack</code>、日志和监控能快速定位到 <code>es-sync-pool-%d</code> 这批线程，而不是面对一堆默认的 <code>pool-1-thread-1</code>。</p>
-<h2 id="七、生产环境的几个坑"><a href="#七、生产环境的几个坑" class="headerlink" title="七、生产环境的几个坑"></a>七、生产环境的几个坑</h2><h3 id="1-不要忽略-MySQL-深分页"><a href="#1-不要忽略-MySQL-深分页" class="headerlink" title="1. 不要忽略 MySQL 深分页"></a>1. 不要忽略 MySQL 深分页</h3><p>示例代码里使用了 <code>offset + limit</code>，它适合理解流程，但在千万级数据下不一定适合生产。</p>
-<p>当偏移量来到 800 万时，类似下面的 SQL 会变得很慢：</p>
-<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">select</span> <span class="operator">*</span> <span class="keyword">from</span> table_name <span class="keyword">order</span> <span class="keyword">by</span> id limit <span class="number">8000000</span>, <span class="number">5000</span>;</span><br></pre></td></tr></table></figure>
-
-<p>因为 MySQL 需要扫描并跳过前面大量数据，再返回后面的 5000 条。</p>
-<p>如果主键是自增的，更推荐使用基于 ID 的滚动分页：</p>
-<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">select</span> <span class="operator">*</span></span><br><span class="line"><span class="keyword">from</span> table_name</span><br><span class="line"><span class="keyword">where</span> id <span class="operator">&gt;</span> #&#123;lastId&#125;</span><br><span class="line"><span class="keyword">order</span> <span class="keyword">by</span> id</span><br><span class="line">limit <span class="number">5000</span>;</span><br></pre></td></tr></table></figure>
-
-<p>这样每次都能沿着主键索引向后扫描，性能更稳定。</p>
-<h3 id="2-失败批次要能补偿"><a href="#2-失败批次要能补偿" class="headerlink" title="2. 失败批次要能补偿"></a>2. 失败批次要能补偿</h3><p>同步 2000 个批次时，只要有几个批次因为网络抖动、ES 瞬时拒绝写入或数据库超时失败，就可能造成索引数据缺失。</p>
-<p>所以 <code>catch</code> 里不能只打印日志。更稳妥的方式是把失败批次记录下来，例如写入失败表、Redis 或本地补偿文件，主流程结束后再进行二次重试。</p>
-<p>同时，写 ES 时最好保证幂等。比如使用数据库主键作为 ES 文档 <code>_id</code>，重复写入同一条数据时只是覆盖更新，而不是生成重复文档。</p>
-<h3 id="3-Bulk-大小要压测"><a href="#3-Bulk-大小要压测" class="headerlink" title="3. Bulk 大小要压测"></a>3. Bulk 大小要压测</h3><p>每批 5000 条只是一个经验值，不是固定答案。</p>
-<p>如果单条文档很大，5000 条可能会让单次 Bulk 请求过重，导致 ES 写入慢或者请求体过大。如果单条文档很小，批次太小又会导致网络请求过多，吞吐上不去。</p>
-<p>实际落地时要观察几个指标：</p>
-<ol>
-<li>单次 Bulk 请求耗时。</li>
-<li>ES 是否出现拒绝写入。</li>
-<li>JVM 堆内存和 GC 情况。</li>
-<li>MySQL 查询耗时和连接池占用。</li>
-</ol>
-<p>然后再调整 <code>pageSize</code>、线程数和队列长度。</p>
-<h3 id="4-数据库压力可能成为瓶颈"><a href="#4-数据库压力可能成为瓶颈" class="headerlink" title="4. 数据库压力可能成为瓶颈"></a>4. 数据库压力可能成为瓶颈</h3><p>线程池开到 <code>CPU * 2</code> 并不代表一定合适。它只是一个起点。</p>
-<p>如果压测发现 MySQL CPU 飙高、慢查询增多，或者连接池被打满，就要降低并发线程数，或者增大单批次大小，减少并发查询次数。同步任务的目标不是让应用跑满，而是让数据库、应用和 ES 形成稳定吞吐。</p>
-<h2 id="八、总结"><a href="#八、总结" class="headerlink" title="八、总结"></a>八、总结</h2><p>千万级数据同步到 Elasticsearch，重点不是简单地“开多线程”，而是建立一个可控的同步流水线。</p>
-<p><code>CountDownLatch</code> 解决的是主线程如何等待所有批次结束；<code>ThreadPoolExecutor</code> 解决的是并发执行；有界队列和 <code>CallerRunsPolicy</code> 解决的是生产速度过快时如何自动减速。</p>
-<p>一套比较完整的方案应该同时考虑：</p>
-<ol>
-<li>分批读取，避免一次性加载导致 OOM。</li>
-<li>有界线程池，限制并发和任务积压。</li>
-<li><code>CallerRunsPolicy</code>，在消费变慢时形成背压。</li>
-<li><code>CountDownLatch</code>，等待所有批次完成，并设置超时。</li>
-<li>ID 滚动分页，避免 MySQL 深分页问题。</li>
-<li>失败批次记录和重试，保证最终数据完整。</li>
-<li>使用数据库主键作为 ES <code>_id</code>，保证重复写入时具备幂等性。</li>
-</ol>
-<p>这样设计后，整个同步任务就不再是一次不可控的大查询，而是一批批可观察、可限流、可补偿的小任务。</p>
-
-      
+  <section class="libra-hero" aria-labelledby="libra-hero-title">
+  <div class="libra-hero__inner">
+    <p class="libra-hero__eyebrow">Personal Knowledge Base</p>
+    <h1 id="libra-hero-title">Libra's notes</h1>
+    <p class="libra-hero__subtitle">
+      <span data-libra-typewriter></span><span class="libra-hero__cursor" aria-hidden="true"></span>
+    </p>
+    <div class="libra-hero__actions">
+      <a href="/blog/">阅读文章</a>
+      <a href="/tags/">查看标签</a>
+      <a href="#libra-about">了解这里</a>
     </div>
+  </div>
+  <a class="libra-hero__scroll" href="#libra-about" aria-label="向下查看">
+    <i class="fa fa-arrow-down"></i>
+  </a>
+</section>
 
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
+<section id="libra-about" class="libra-section libra-section--intro">
+  <div>
+    <p class="libra-section__label">About</p>
+    <h2>你好，我是 Libra</h2>
+  </div>
+  <p>
+    我是一名计算机硕士，关注后端工程、分布式系统和高并发场景下的系统设计。我的技术基础覆盖计算机核心课程与多语言后端开发，主要深耕 Java 生态，也持续关注工程效率、性能优化和线上稳定性。
+  </p>
+  <p class="libra-note">
+    这个博客会记录我在架构设计、性能调优、问题排查、容器化与云原生实践中的思考，也会整理 AI 编程和智能 Agent 服务落地过程中的经验。
+  </p>
+</section>
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/23/distributed-route-tracing/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/IMG_1578.jpeg">
-      <meta itemprop="name" content="Libra">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Libra's notes">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2026/05/23/distributed-route-tracing/" class="post-title-link" itemprop="url">分布式路由追踪：从 TraceId 到跨线程透传</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-              
-
-              <time title="创建时间：2026-05-23 22:23:59 / 修改时间：22:35:50" itemprop="dateCreated datePublished" datetime="2026-05-23T22:23:59+08:00">2026-05-23</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">分类于</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/" itemprop="url" rel="index"><span itemprop="name">学习笔记</span></a>
-                </span>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>在排查线上问题时，最怕看到的是一串散落在不同机器、不同服务、不同线程里的日志：每一条看起来都和问题有关，但又很难串成一条完整的请求链路。</p>
-<p>分布式路由追踪要解决的就是这件事：给一次请求一个全局唯一的 <code>TraceId</code>，让它在网关、业务服务、RPC 调用、消息队列、异步线程之间一直传下去。这样排查问题时，就可以根据一个 <code>TraceId</code> 找到完整路径，再结合每个关键步骤的耗时和调用关系定位问题。</p>
-<h2 id="一、为什么需要-TraceId"><a href="#一、为什么需要-TraceId" class="headerlink" title="一、为什么需要 TraceId"></a>一、为什么需要 TraceId</h2><p>在单体项目里，请求通常只落在某一台机器上的某个进程里。只要日志里能打印出请求标识，基本就可以顺着日志找到整个执行过程。</p>
-<p>但在微服务环境下，一次请求可能会经过：</p>
-<ol>
-<li>网关。</li>
-<li>A 服务。</li>
-<li>B 服务。</li>
-<li>MQ 消费者。</li>
-<li>线程池里的异步任务。</li>
-</ol>
-<p>如果没有统一的追踪标识，这些日志就会分散在不同服务、不同机器甚至不同线程中。排查问题时只能到处搜索，效率很低。</p>
-<p>所以，最基础的做法是引入 <code>TraceId</code>。它代表一次完整请求。只要所有服务都把同一个 <code>TraceId</code> 打进日志，就能把散落的日志重新串起来。</p>
-<p>不过，只有 <code>TraceId</code> 还不够。它可以告诉我们“这些日志属于同一次请求”，但不一定能告诉我们“服务之间是如何调用的”。这时还需要 <code>SpanId</code>。</p>
-<h2 id="二、TraceId-和-SpanId-分别做什么"><a href="#二、TraceId-和-SpanId-分别做什么" class="headerlink" title="二、TraceId 和 SpanId 分别做什么"></a>二、TraceId 和 SpanId 分别做什么</h2><p>可以这样理解：</p>
-<ul>
-<li><code>TraceId</code>：标识一整条请求链路。</li>
-<li><code>SpanId</code>：标识链路中的某一次调用或某一个执行片段。</li>
-</ul>
-<p>比如一次请求从网关进入 A 服务，A 服务再调用 B 服务，B 服务又调用 C 服务。它们拥有同一个 <code>TraceId</code>，但每一次调用都应该有不同的 <code>SpanId</code>。</p>
-<p>一种常见的表示方式是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">TraceId: 8f8b1d7c...</span><br><span class="line"></span><br><span class="line">网关入口: spanId = 0</span><br><span class="line">A 服务处理: spanId = 0.1</span><br><span class="line">A 调用 B: spanId = 0.1.1</span><br><span class="line">B 调用 C: spanId = 0.1.1.1</span><br></pre></td></tr></table></figure>
-
-<p>这样不仅能知道日志属于哪次请求，还能知道调用层级和先后关系。</p>
-<h2 id="三、先从单体场景做日志增强"><a href="#三、先从单体场景做日志增强" class="headerlink" title="三、先从单体场景做日志增强"></a>三、先从单体场景做日志增强</h2><p>在单体或集群部署的场景里，首先要解决的是“如何无侵入地打印追踪日志”。</p>
-<p>需求通常有两个：</p>
-<ol>
-<li>对业务代码尽量无侵入。</li>
-<li>对接口性能影响尽量小。</li>
-</ol>
-<p>无侵入可以通过切面编程实现。切面可以分成两类：</p>
-<ul>
-<li>静态代理：典型代表是 AspectJ，在编译期完成切面代码注入。</li>
-<li>动态代理：典型代表是 Spring AOP，在运行期生成代理对象，再通过代理和反射完成增强。</li>
-</ul>
-<p>如果只是做日志记录、限流、耗时统计这类通用增强，静态代理对运行时性能影响更小。动态代理虽然更灵活，但运行期生成代理类和反射调用会带来一定开销。</p>
-<p>一个简化后的切面逻辑大概是这样：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Aspect</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Tracer</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Around(&quot;execution(public * com.example..*(..))&quot;)</span></span><br><span class="line">    <span class="keyword">public</span> Object <span class="title function_">trace</span><span class="params">(ProceedingJoinPoint pjp)</span> <span class="keyword">throws</span> Throwable &#123;</span><br><span class="line">        <span class="type">TraceContext</span> <span class="variable">traceContext</span> <span class="operator">=</span> TraceContext.get();</span><br><span class="line">        <span class="type">String</span> <span class="variable">traceId</span> <span class="operator">=</span> traceContext.getTraceId();</span><br><span class="line">        <span class="type">String</span> <span class="variable">signature</span> <span class="operator">=</span> pjp.getSignature().toShortString();</span><br><span class="line"></span><br><span class="line">        <span class="type">long</span> <span class="variable">start</span> <span class="operator">=</span> System.currentTimeMillis();</span><br><span class="line">        <span class="type">boolean</span> <span class="variable">success</span> <span class="operator">=</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="type">String</span> <span class="variable">errorMessage</span> <span class="operator">=</span> <span class="string">&quot;&quot;</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="type">Object</span> <span class="variable">result</span> <span class="operator">=</span> pjp.proceed();</span><br><span class="line">            success = <span class="literal">true</span>;</span><br><span class="line">            <span class="keyword">return</span> result;</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Throwable e) &#123;</span><br><span class="line">            errorMessage = e.getMessage();</span><br><span class="line">            <span class="keyword">throw</span> e;</span><br><span class="line">        &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">            <span class="type">long</span> <span class="variable">cost</span> <span class="operator">=</span> System.currentTimeMillis() - start;</span><br><span class="line">            log.info(</span><br><span class="line">                <span class="string">&quot;traceId=&#123;&#125;, signature=&#123;&#125;, cost=&#123;&#125;ms, success=&#123;&#125;, error=&#123;&#125;&quot;</span>,</span><br><span class="line">                traceId, signature, cost, success, errorMessage</span><br><span class="line">            );</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>这里的重点不是代码本身，而是思路：把请求标识、方法签名、开始时间、耗时、执行结果统一记录下来。</p>
-<p>如果并发量比较高，还要考虑日志量。假设系统有 <code>10000 QPS</code>，每个请求打印 10 条日志，每秒就会产生 10 万条日志，对磁盘 IO 压力很大。对于 <code>INFO</code> 级别日志，可以做采样，比如只记录 10%。对于异常日志，则应该尽量完整保留。</p>
-<p>还有一个实际问题：集群里有多台实例时，不知道某个 <code>TraceId</code> 的日志落在哪台机器上。如果每次都登录多台机器搜索，会很痛苦。更好的做法是把日志发送到消息队列，再由消费端写入 Elasticsearch。排查问题时直接在 ES 中按 <code>TraceId</code> 检索即可。</p>
-<h2 id="四、微服务场景：让-TraceId-在服务之间传递"><a href="#四、微服务场景：让-TraceId-在服务之间传递" class="headerlink" title="四、微服务场景：让 TraceId 在服务之间传递"></a>四、微服务场景：让 TraceId 在服务之间传递</h2><p>进入微服务后，问题变成了：一次请求跨越多个服务，<code>TraceId</code> 怎么传下去？</p>
-<p>基本流程是：</p>
-<ol>
-<li>网关收到外部请求时生成全局唯一的 <code>TraceId</code>。</li>
-<li>网关把 <code>TraceId</code> 放入请求 Header。</li>
-<li>业务服务的 Filter 拦截请求，从 Header 里解析 <code>TraceId</code>。</li>
-<li>服务把 <code>TraceId</code> 放入当前线程的 <code>RequestContext</code>。</li>
-<li>后续 RPC、MQ、异步任务继续从 <code>RequestContext</code> 中读取并透传。</li>
-</ol>
-<p><code>RequestContext</code> 通常基于 <code>ThreadLocal</code> 实现。这样当前请求线程里的业务代码都可以方便地获取 <code>TraceId</code>，而不需要在每个方法参数里显式传递。</p>
-<p>在服务之间传递时，常见场景有两类：RPC 调用和消息队列。</p>
-<h2 id="五、Dubbo-调用中的透传"><a href="#五、Dubbo-调用中的透传" class="headerlink" title="五、Dubbo 调用中的透传"></a>五、Dubbo 调用中的透传</h2><p>Dubbo 场景可以利用 Filter 统一处理。调用方在发起 RPC 前，从 <code>RequestContext</code> 中取出 <code>TraceId</code>，放入 Dubbo attachment；服务提供方收到请求后，再从 attachment 中取出 <code>TraceId</code>，写入自己的 <code>RequestContext</code>。</p>
-<p>调用方的核心逻辑可以理解成：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line"></span><br><span class="line"><span class="type">String</span> <span class="variable">traceId</span> <span class="operator">=</span> context.getTraceId();</span><br><span class="line"><span class="type">String</span> <span class="variable">tenantId</span> <span class="operator">=</span> String.valueOf(context.getTenantId());</span><br><span class="line"></span><br><span class="line">invocation.setAttachment(<span class="string">&quot;trace_id&quot;</span>, traceId);</span><br><span class="line">invocation.setAttachment(<span class="string">&quot;tenant_id&quot;</span>, tenantId);</span><br><span class="line"></span><br><span class="line"><span class="keyword">return</span> invoker.invoke(invocation);</span><br></pre></td></tr></table></figure>
-
-<p>服务提供方则反过来：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">String</span> <span class="variable">traceId</span> <span class="operator">=</span> invocation.getAttachment(<span class="string">&quot;trace_id&quot;</span>);</span><br><span class="line"><span class="type">String</span> <span class="variable">tenantId</span> <span class="operator">=</span> invocation.getAttachment(<span class="string">&quot;tenant_id&quot;</span>);</span><br><span class="line"></span><br><span class="line"><span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">context.setTraceId(traceId);</span><br><span class="line">context.setTenantId(Long.valueOf(tenantId));</span><br><span class="line"></span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> invoker.invoke(invocation);</span><br><span class="line">&#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">    RequestContext.clear();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>这里还有一个细节：一定要在 <code>finally</code> 里清理上下文。线程池中的线程会被复用，如果不清理 <code>ThreadLocal</code>，下一次请求可能读到上一次请求遗留的数据，造成链路串线，甚至引发租户数据污染。</p>
-<p>MQ 的处理思路也类似：发送消息前把 <code>TraceId</code> 放到消息 Header 或消息属性里，消费消息时再取出来放入当前线程上下文。</p>
-<h2 id="六、真正麻烦的是服务内异步"><a href="#六、真正麻烦的是服务内异步" class="headerlink" title="六、真正麻烦的是服务内异步"></a>六、真正麻烦的是服务内异步</h2><p>服务之间的透传解决后，链路并不一定完整。因为同一个服务内部还可能有异步任务。</p>
-<p>比如业务代码里使用了线程池：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">executor.execute(() -&gt; &#123;</span><br><span class="line">    <span class="comment">// 异步执行的业务逻辑</span></span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
-
-<p><code>ThreadLocal</code> 的作用范围是当前线程。主线程中的 <code>RequestContext</code> 不会自动出现在子线程里，所以异步任务里可能拿不到 <code>TraceId</code>。这会导致链路在服务内部断掉。</p>
-<p>一个成熟方案是使用阿里的 <code>TransmittableThreadLocal</code>，它可以解决线程池复用场景下的上下文传递问题。但在已有系统中直接替换所有 <code>ThreadLocal</code> 风险比较大，需要大量回归测试，出了问题也会增加排查成本。</p>
-<p>因此可以借鉴它的思路，自己做一个更小范围的透传实现。</p>
-<p>核心原则是：</p>
-<ol>
-<li>提交任务时，从当前线程复制需要透传的字段。</li>
-<li>执行任务前，把这些字段设置到子线程的 <code>ThreadLocal</code>。</li>
-<li>任务执行结束后，清理子线程上下文。</li>
-</ol>
-<h2 id="七、用-TaskDecorator-包装线程池任务"><a href="#七、用-TaskDecorator-包装线程池任务" class="headerlink" title="七、用 TaskDecorator 包装线程池任务"></a>七、用 TaskDecorator 包装线程池任务</h2><p>如果项目统一使用 Spring 的 <code>ThreadPoolTaskExecutor</code>，可以通过 <code>TaskDecorator</code> 自动包装每一个提交到线程池的任务。</p>
-<p>简化后的结构如下：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Configuration</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ThreadPoolAutoConfiguration</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Bean</span></span><br><span class="line">    <span class="keyword">public</span> ThreadPoolTaskExecutor <span class="title function_">taskExecutor</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="type">ThreadPoolTaskExecutor</span> <span class="variable">executor</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ThreadPoolTaskExecutor</span>();</span><br><span class="line">        executor.setCorePoolSize(<span class="number">8</span>);</span><br><span class="line">        executor.setMaxPoolSize(<span class="number">32</span>);</span><br><span class="line">        executor.setTaskDecorator(<span class="keyword">new</span> <span class="title class_">AsyncTaskDecorator</span>());</span><br><span class="line">        executor.initialize();</span><br><span class="line">        <span class="keyword">return</span> executor;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">class</span> <span class="title class_">AsyncTaskDecorator</span> <span class="keyword">implements</span> <span class="title class_">TaskDecorator</span> &#123;</span><br><span class="line">        <span class="meta">@Override</span></span><br><span class="line">        <span class="keyword">public</span> Runnable <span class="title function_">decorate</span><span class="params">(Runnable runnable)</span> &#123;</span><br><span class="line">            <span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">new</span> <span class="title class_">ThreadPoolDecoratorTask</span>(context, runnable);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>包装任务时，在构造方法里保存主线程中的上下文：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ThreadPoolDecoratorTask</span> <span class="keyword">implements</span> <span class="title class_">Runnable</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> Runnable target;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> String traceId;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> Long tenantId;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="title function_">ThreadPoolDecoratorTask</span><span class="params">(RequestContext context, Runnable target)</span> &#123;</span><br><span class="line">        <span class="built_in">this</span>.target = target;</span><br><span class="line">        <span class="built_in">this</span>.traceId = context.getTraceId();</span><br><span class="line">        <span class="built_in">this</span>.tenantId = context.getTenantId();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">run</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">        context.setTraceId(traceId);</span><br><span class="line">        context.setTenantId(tenantId);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            target.run();</span><br><span class="line">        &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">            RequestContext.clear();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>这个实现的关键点在于：<code>traceId</code> 和 <code>tenantId</code> 不是等到子线程执行时才读取，而是在任务提交时就从主线程复制出来，保存到包装对象的成员变量里。等任务真正运行时，再把这些值设置到执行线程的 <code>ThreadLocal</code> 中。</p>
-<p>这样对业务方基本无感。只要业务方使用平台统一提供的线程池，异步任务就能自动继承请求上下文。</p>
-<h2 id="八、兜底方案：手动包装-Runnable-或-Callable"><a href="#八、兜底方案：手动包装-Runnable-或-Callable" class="headerlink" title="八、兜底方案：手动包装 Runnable 或 Callable"></a>八、兜底方案：手动包装 Runnable 或 Callable</h2><p>现实里总会遇到一些不统一的写法，比如：</p>
-<ul>
-<li>直接 <code>new Thread(...)</code>。</li>
-<li>自定义线程池。</li>
-<li>使用 <code>CompletableFuture</code> 的默认线程池。</li>
-<li>接入了历史代码，不方便立即迁移到平台线程池。</li>
-</ul>
-<p>这类场景可以提供一个手动包装器，让业务方在提交任务前显式包装 <code>Runnable</code> 或 <code>Callable</code>。</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">RunnableWrapper</span> <span class="keyword">implements</span> <span class="title class_">Runnable</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> Runnable target;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> String traceId;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> Long tenantId;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> RunnableWrapper <span class="title function_">of</span><span class="params">(Runnable runnable)</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> <span class="title class_">RunnableWrapper</span>(runnable);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="title function_">RunnableWrapper</span><span class="params">(Runnable target)</span> &#123;</span><br><span class="line">        <span class="built_in">this</span>.target = target;</span><br><span class="line"></span><br><span class="line">        <span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">        <span class="built_in">this</span>.traceId = context.getTraceId();</span><br><span class="line">        <span class="built_in">this</span>.tenantId = context.getTenantId();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">run</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">        context.setTraceId(traceId);</span><br><span class="line">        context.setTenantId(tenantId);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            target.run();</span><br><span class="line">        &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">            RequestContext.clear();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>使用时类似这样：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">new</span> <span class="title class_">Thread</span>(RunnableWrapper.of(() -&gt; &#123;</span><br><span class="line">    <span class="comment">// 这里可以拿到 traceId</span></span><br><span class="line">&#125;)).start();</span><br></pre></td></tr></table></figure>
-
-<p>这不是最优雅的方式，但适合作为兜底方案。平台线程池解决主路径，手动包装解决特殊路径，两者结合可以让链路追踪覆盖得更完整。</p>
-<h2 id="九、一次完整链路可以这样串起来"><a href="#九、一次完整链路可以这样串起来" class="headerlink" title="九、一次完整链路可以这样串起来"></a>九、一次完整链路可以这样串起来</h2><p>把上面的内容合在一起，一次请求的追踪流程大概是：</p>
-<ol>
-<li>请求进入网关，网关生成 <code>TraceId</code>。</li>
-<li>网关把 <code>TraceId</code> 写入 Header，转发给业务服务。</li>
-<li>业务服务 Filter 解析 Header，写入 <code>RequestContext</code>。</li>
-<li>方法切面记录接口耗时、成功状态和异常信息。</li>
-<li>Dubbo 调用前把 <code>TraceId</code> 写入 attachment。</li>
-<li>Dubbo 服务提供方从 attachment 中恢复 <code>TraceId</code>。</li>
-<li>MQ 发送和消费时通过消息属性继续传递 <code>TraceId</code>。</li>
-<li>线程池任务通过 <code>TaskDecorator</code> 复制上下文。</li>
-<li>特殊异步任务使用 <code>RunnableWrapper</code> 或 <code>CallableWrapper</code> 手动透传。</li>
-<li>日志统一进入 MQ 和 ES，排查时按 <code>TraceId</code> 检索。</li>
-</ol>
-<p>这条链路里最重要的不是某一段代码，而是两个动作：入口处生成，边界处透传。</p>
-<p>入口包括网关、MQ 消费入口、定时任务入口等。边界包括 RPC、MQ、线程池、手动创建线程等。只要每个边界都处理好，<code>TraceId</code> 就不会轻易断。</p>
-<h2 id="十、总结"><a href="#十、总结" class="headerlink" title="十、总结"></a>十、总结</h2><p>分布式路由追踪的核心目标，是让一次请求在复杂系统里仍然保持“可观察”。</p>
-<p>在实现上，可以分层推进：</p>
-<ol>
-<li>用 AOP 记录方法耗时和执行结果，降低业务侵入。</li>
-<li>用日志采样和集中式检索降低 IO 与排查成本。</li>
-<li>用 <code>TraceId</code> 串联同一次请求的所有日志。</li>
-<li>用 <code>SpanId</code> 补充服务间调用关系。</li>
-<li>用 RPC Filter 和 MQ Header 解决跨服务传递。</li>
-<li>用线程池装饰器和任务包装器解决跨线程传递。</li>
-</ol>
-<p>真正容易出问题的地方，往往不是主流程，而是各种边界：服务调用边界、消息边界、线程边界。把这些边界守住，链路追踪才能从“日志里有个 ID”变成真正可用的排查工具。</p>
-
-      
+<section class="libra-section">
+  <p class="libra-section__label">Focus</p>
+  <h2>我主要关注</h2>
+  <div class="libra-focus-grid">
+    <div class="libra-focus-card">
+      <h3>后端工程实践</h3>
+      <p>记录 Java 工程、接口设计、问题排查和可维护性相关的经验。</p>
     </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/23/hexo-github-pages-guide/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/IMG_1578.jpeg">
-      <meta itemprop="name" content="Libra">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Libra's notes">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2026/05/23/hexo-github-pages-guide/" class="post-title-link" itemprop="url">使用 Hexo 写博客，并发布到 GitHub Pages</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-              
-
-              <time title="创建时间：2026-05-23 00:00:00 / 修改时间：18:14:44" itemprop="dateCreated datePublished" datetime="2026-05-23T00:00:00+08:00">2026-05-23</time>
-            </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">分类于</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/" itemprop="url" rel="index"><span itemprop="name">学习笔记</span></a>
-                </span>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>Hexo 是一个静态博客框架。它的工作方式很适合初学者理解：我们用 Markdown 写文章，Hexo 把文章和主题模板组合起来，生成一组静态 HTML、CSS 和 JavaScript 文件。最后，把这些静态文件发布到 GitHub Pages，就可以拥有一个可以访问的网站。</p>
-<h2 id="一、准备环境"><a href="#一、准备环境" class="headerlink" title="一、准备环境"></a>一、准备环境</h2><p>使用 Hexo 前，需要先安装两个基础工具：</p>
-<ol>
-<li>Node.js：用来运行 Hexo。</li>
-<li>Git：用来管理代码，并把博客推送到 GitHub。</li>
-</ol>
-<p>安装完成后，可以在终端检查版本：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">node -v</span><br><span class="line">npm -v</span><br><span class="line">git --version</span><br></pre></td></tr></table></figure>
-
-<p>如果这些命令都能输出版本号，就说明环境基本准备好了。</p>
-<h2 id="二、创建-Hexo-博客项目"><a href="#二、创建-Hexo-博客项目" class="headerlink" title="二、创建 Hexo 博客项目"></a>二、创建 Hexo 博客项目</h2><p>第一次使用 Hexo 时，可以先全局安装 Hexo 命令行工具：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">npm install -g hexo-cli</span><br></pre></td></tr></table></figure>
-
-<p>然后创建一个新的博客项目：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">hexo init myblog</span><br><span class="line"><span class="built_in">cd</span> myblog</span><br><span class="line">npm install</span><br></pre></td></tr></table></figure>
-
-<p>执行完成后，项目里会出现几个重要目录：</p>
-<ul>
-<li><code>source/_posts/</code>：存放博客文章。</li>
-<li><code>themes/</code>：存放主题。</li>
-<li><code>_config.yml</code>：博客的主配置文件。</li>
-<li><code>public/</code>：生成后的静态网站文件会放在这里。</li>
-</ul>
-<h2 id="三、创建一篇文章"><a href="#三、创建一篇文章" class="headerlink" title="三、创建一篇文章"></a>三、创建一篇文章</h2><p>Hexo 可以用命令创建新文章：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo new <span class="string">&quot;我的第一篇博客&quot;</span></span><br></pre></td></tr></table></figure>
-
-<p>执行后，会在 <code>source/_posts/</code> 目录下生成一个 Markdown 文件。打开它后，会看到类似这样的内容：</p>
-<figure class="highlight markdown"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">---</span><br><span class="line">title: 我的第一篇博客</span><br><span class="line">date: 2026-05-23 10:00:00</span><br><span class="line"><span class="section">tags:</span></span><br><span class="line"><span class="section">---</span></span><br></pre></td></tr></table></figure>
-
-<p>上方 <code>---</code> 包起来的部分叫 Front Matter，用来记录文章标题、日期、标签、分类等信息。下面就可以正常写 Markdown 内容。</p>
-<h2 id="四、本地预览博客"><a href="#四、本地预览博客" class="headerlink" title="四、本地预览博客"></a>四、本地预览博客</h2><p>写完文章后，可以先在本地启动预览服务器：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo server</span><br></pre></td></tr></table></figure>
-
-<p>通常终端会显示一个本地地址：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://localhost:4000</span><br></pre></td></tr></table></figure>
-
-<p>在浏览器打开这个地址，就能看到自己的博客页面。修改文章后，刷新页面一般就可以看到更新。</p>
-<h2 id="五、把-Markdown-转成-HTML"><a href="#五、把-Markdown-转成-HTML" class="headerlink" title="五、把 Markdown 转成 HTML"></a>五、把 Markdown 转成 HTML</h2><p>Hexo 的核心步骤就是“生成静态文件”。运行：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo generate</span><br></pre></td></tr></table></figure>
-
-<p>也可以简写为：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo g</span><br></pre></td></tr></table></figure>
-
-<p>执行后，Hexo 会把 <code>source/_posts/</code> 里的 Markdown 文章转成 HTML，并输出到 <code>public/</code> 目录。比如一篇文章最终可能会变成：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">public/2026/05/23/my-post/index.html</span><br></pre></td></tr></table></figure>
-
-<p>这个 <code>index.html</code> 就是浏览器真正打开的网页文件。</p>
-<h2 id="六、创建-GitHub-仓库"><a href="#六、创建-GitHub-仓库" class="headerlink" title="六、创建 GitHub 仓库"></a>六、创建 GitHub 仓库</h2><p>要使用 GitHub Pages，需要先在 GitHub 上创建一个仓库。</p>
-<p>如果想做个人主页，仓库名通常写成：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">你的用户名.github.io</span><br></pre></td></tr></table></figure>
-
-<p>例如 GitHub 用户名是 <code>alice</code>，仓库名就是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">alice.github.io</span><br></pre></td></tr></table></figure>
-
-<p>这种仓库发布后，网站地址通常是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://alice.github.io</span><br></pre></td></tr></table></figure>
-
-<p>如果仓库名不是这种格式，比如叫 <code>myblog</code>，网站地址通常会是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://你的用户名.github.io/myblog/</span><br></pre></td></tr></table></figure>
-
-<p>这种情况下，需要把 <code>_config.yml</code> 里的 <code>url</code> 配置成对应地址。</p>
-<h2 id="七、配置-GitHub-Pages-发布"><a href="#七、配置-GitHub-Pages-发布" class="headerlink" title="七、配置 GitHub Pages 发布"></a>七、配置 GitHub Pages 发布</h2><p>常见做法是把 Hexo 生成出来的 <code>public/</code> 文件发布到 GitHub Pages。可以先安装 Hexo 的 Git 部署插件：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">npm install hexo-deployer-git --save</span><br></pre></td></tr></table></figure>
-
-<p>然后修改 <code>_config.yml</code> 末尾的 <code>deploy</code> 配置：</p>
-<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">deploy:</span></span><br><span class="line">  <span class="attr">type:</span> <span class="string">git</span></span><br><span class="line">  <span class="attr">repo:</span> <span class="string">https://github.com/你的用户名/你的用户名.github.io.git</span></span><br><span class="line">  <span class="attr">branch:</span> <span class="string">main</span></span><br></pre></td></tr></table></figure>
-
-<p>如果使用的是项目页仓库，比如 <code>myblog</code>，配置可能是：</p>
-<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">deploy:</span></span><br><span class="line">  <span class="attr">type:</span> <span class="string">git</span></span><br><span class="line">  <span class="attr">repo:</span> <span class="string">https://github.com/你的用户名/myblog.git</span></span><br><span class="line">  <span class="attr">branch:</span> <span class="string">gh-pages</span></span><br></pre></td></tr></table></figure>
-
-<p>这里的 <code>repo</code> 要换成自己的 GitHub 仓库地址。</p>
-<h2 id="八、一键生成并部署"><a href="#八、一键生成并部署" class="headerlink" title="八、一键生成并部署"></a>八、一键生成并部署</h2><p>配置完成后，可以执行：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">hexo clean</span><br><span class="line">hexo generate</span><br><span class="line">hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>也可以简写成：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">hexo clean</span><br><span class="line">hexo g</span><br><span class="line">hexo d</span><br></pre></td></tr></table></figure>
-
-<p>这几步的意思是：</p>
-<ol>
-<li><code>hexo clean</code>：清理旧的生成文件。</li>
-<li><code>hexo generate</code>：重新生成 HTML 静态文件。</li>
-<li><code>hexo deploy</code>：把生成结果推送到 GitHub。</li>
-</ol>
-<p>推送完成后，进入 GitHub 仓库的 Settings，找到 Pages 页面，确认发布分支设置正确。稍等一会儿，GitHub Pages 就会生成网站地址。</p>
-<h2 id="九、一次-GitHub-Pages-构建失败的排查记录"><a href="#九、一次-GitHub-Pages-构建失败的排查记录" class="headerlink" title="九、一次 GitHub Pages 构建失败的排查记录"></a>九、一次 GitHub Pages 构建失败的排查记录</h2><p>第一次部署时，我遇到了一个很典型的问题：<code>hexo deploy</code> 已经把 <code>public/</code> 里的文件推送到了 GitHub 仓库，仓库根目录里也能看到 <code>index.html</code>、<code>css/</code>、<code>js/</code>、<code>archives/</code> 等静态文件，但是浏览器访问：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://moyu-yunru.github.io</span><br></pre></td></tr></table></figure>
-
-<p>页面仍然显示 404：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">There isn&#x27;t a GitHub Pages site here.</span><br></pre></td></tr></table></figure>
-
-<p>当时 GitHub 仓库的 Pages 设置页面显示，站点来源是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">main / (root)</span><br></pre></td></tr></table></figure>
-
-<p>这说明分支和目录看起来是对的。继续查看仓库首页中间的检查状态，发现有一条红色失败提示：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Some checks were not successful</span><br><span class="line">pages build and deployment / build (dynamic) Failing</span><br><span class="line">pages build and deployment / deploy (dynamic) Skipped</span><br><span class="line">pages build and deployment / report-build-status (dynamic) Successful</span><br></pre></td></tr></table></figure>
-
-<p>这说明问题不在于文件没有推送上去，而是 GitHub Pages 的构建流程失败了。</p>
-<blockquote>
-<p>当时两张截图里最关键的信息是：第一张 Pages 设置截图确认了发布来源是 <code>main / (root)</code>；第二张仓库首页截图确认了根目录存在 <code>index.html</code>，但 Pages 的 build 检查失败，所以网站仍然 404。</p>
-</blockquote>
-<p>对于 Hexo 这种已经生成好的静态网站，GitHub Pages 不需要再用 Jekyll 处理一遍。为了告诉 GitHub “直接发布这些静态文件就好”，可以在 Hexo 的 <code>source/</code> 目录下放一个 <code>.nojekyll</code> 文件：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">touch</span> <span class="built_in">source</span>/.nojekyll</span><br></pre></td></tr></table></figure>
-
-<p>然后重新生成并部署：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">hexo clean</span><br><span class="line">hexo generate</span><br><span class="line">hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>这样 <code>hexo generate</code> 时，<code>.nojekyll</code> 会被复制到 <code>public/</code> 目录；<code>hexo deploy</code> 再把它一起推送到 GitHub。GitHub Pages 看到 <code>.nojekyll</code> 后，就会跳过 Jekyll 处理，直接发布 Hexo 已经生成好的静态网页。</p>
-<p>如果后续再遇到 GitHub Pages 404，可以按这个顺序排查：</p>
-<ol>
-<li>仓库名是否是 <code>用户名.github.io</code>。</li>
-<li>Pages 设置里的分支和目录是否是实际部署的位置，例如 <code>main / (root)</code>。</li>
-<li>仓库根目录是否真的有 <code>index.html</code>。</li>
-<li>Actions 或仓库首页的 Checks 是否有失败项。</li>
-<li>Hexo 静态站点是否包含 <code>.nojekyll</code>。</li>
-</ol>
-<p>这次问题解决后，我更清楚地理解了：<code>hexo deploy</code> 只是把文件推到 GitHub，真正让网站可以访问，还需要 GitHub Pages 成功完成发布流程。</p>
-<h2 id="十、日常写博客流程"><a href="#十、日常写博客流程" class="headerlink" title="十、日常写博客流程"></a>十、日常写博客流程</h2><p>以后每次写新文章，大致流程都是：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">hexo new <span class="string">&quot;文章标题&quot;</span></span><br><span class="line">hexo server</span><br><span class="line">hexo clean</span><br><span class="line">hexo generate</span><br><span class="line">hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>如果只是想在本地转成 HTML，不需要发布到 GitHub，只运行：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo generate</span><br></pre></td></tr></table></figure>
-
-<p>然后查看 <code>public/</code> 目录即可。</p>
-<h2 id="十一、总结"><a href="#十一、总结" class="headerlink" title="十一、总结"></a>十一、总结</h2><p>Hexo 和 GitHub Pages 的组合非常适合搭建个人博客。Hexo 负责把 Markdown 文章转换成静态网页，GitHub Pages 负责把这些网页托管到互联网上。</p>
-<p>可以把整个流程理解成一句话：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">写 Markdown -&gt; Hexo 生成 HTML -&gt; GitHub Pages 发布网站</span><br></pre></td></tr></table></figure>
-
-<p>当你理解了这个流程后，博客就不再只是一个工具，而是一个可以持续记录学习、整理经验、展示作品的小网站。</p>
-
-      
+    <div class="libra-focus-card">
+      <h3>分布式系统</h3>
+      <p>整理链路追踪、跨线程上下文、服务调用和日志治理等主题。</p>
     </div>
+    <div class="libra-focus-card">
+      <h3>搜索与数据同步</h3>
+      <p>沉淀 Elasticsearch、批量写入、线程池和背压控制的实践。</p>
+    </div>
+    <div class="libra-focus-card">
+      <h3>个人知识管理</h3>
+      <p>把零散资料整理成可复读、可分享、可持续更新的文章。</p>
+    </div>
+  </div>
+</section>
 
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
+<section class="libra-section">
+  <p class="libra-section__label">Reading</p>
+  <h2>推荐阅读</h2>
+  <div class="libra-reading-list">
+    <a href="/2026/05/25/es-bulk-sync-threadpool-backpressure/">
+      <span>01</span>
+      <strong>千万级数据同步到 Elasticsearch：线程池、CountDownLatch 与背压控制</strong>
+    </a>
+    <a href="/2026/05/23/distributed-route-tracing/">
+      <span>02</span>
+      <strong>分布式路由追踪：从 TraceId 到跨线程透传</strong>
+    </a>
+    <a href="/2026/05/23/hexo-github-pages-guide/">
+      <span>03</span>
+      <strong>使用 Hexo 写博客，并发布到 GitHub Pages</strong>
+    </a>
+  </div>
+</section>
 
-
-  
-
+<section class="libra-section libra-section--usage">
+  <p class="libra-section__label">Guide</p>
+  <h2>这个网站怎么用</h2>
+  <div class="libra-guide-grid">
+    <a href="/blog/">
+      <strong>文章</strong>
+      <span>按发布时间浏览完整文章列表。</span>
+    </a>
+    <a href="/tags/">
+      <strong>标签</strong>
+      <span>围绕技术主题查找内容。</span>
+    </a>
+    <a href="/categories/">
+      <strong>分类</strong>
+      <span>查看更粗粒度的文章归档。</span>
+    </a>
+    <a href="/archives/">
+      <strong>归档</strong>
+      <span>按时间回顾写作轨迹。</span>
+    </a>
+  </div>
+</section>
 
 
           </div>
@@ -783,7 +318,7 @@
     <img class="site-author-image" itemprop="image" alt="Libra"
       src="/images/IMG_1578.jpeg">
   <p class="site-author-name" itemprop="name">Libra</p>
-  <div class="site-description" itemprop="description"></div>
+  <div class="site-description" itemprop="description">记录技术、项目与思考</div>
 </div>
 <div class="site-state-wrap motion-element">
   <nav class="site-state">
@@ -808,6 +343,11 @@
       </div>
   </nav>
 </div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Moyu-Yunru" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Moyu-Yunru" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
 
 
 
@@ -837,9 +377,33 @@
   <span class="author" itemprop="copyrightHolder">Libra</span>
 </div>
   <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
-  </div>
+  </div><div class="libra-footer-extra">
+  <span>共撰写了 3 篇文章</span>
+  <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
+</div>
+
 
         
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
 
 
 
@@ -890,6 +454,96 @@
 
   
 
+<script>
+(function() {
+  var phrases = [
+    '记录学习，也记录问题的答案',
+    '沉淀后端工程、分布式系统与搜索实践',
+    '把零散经验整理成可以复用的文章',
+    '保持好奇，长期写作'
+  ];
+
+  function initTypewriter() {
+    var target = document.querySelector('[data-libra-typewriter]');
+    if (!target) return;
+
+    if (window.__libraTypewriterTimer) {
+      clearTimeout(window.__libraTypewriterTimer);
+    }
+
+    var phraseIndex = 0;
+    var charIndex = 0;
+    var deleting = false;
+
+    function tick() {
+      var current = phrases[phraseIndex];
+      target.textContent = current.slice(0, charIndex);
+
+      if (!deleting && charIndex < current.length) {
+        charIndex += 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 88);
+        return;
+      }
+
+      if (!deleting && charIndex === current.length) {
+        deleting = true;
+        window.__libraTypewriterTimer = setTimeout(tick, 1600);
+        return;
+      }
+
+      if (deleting && charIndex > 0) {
+        charIndex -= 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 42);
+        return;
+      }
+
+      deleting = false;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      window.__libraTypewriterTimer = setTimeout(tick, 420);
+    }
+
+    tick();
+  }
+
+  function initRuntime() {
+    var runtime = document.getElementById('libra-site-runtime');
+    if (!runtime) return;
+
+    var start = new Date(runtime.getAttribute('data-start')).getTime();
+    if (!start) return;
+
+    function renderRuntime() {
+      var diff = Math.max(0, Date.now() - start);
+      var seconds = Math.floor(diff / 1000);
+      var days = Math.floor(seconds / 86400);
+      seconds %= 86400;
+      var hours = Math.floor(seconds / 3600);
+      seconds %= 3600;
+      var minutes = Math.floor(seconds / 60);
+      seconds %= 60;
+      runtime.textContent = days + ' 天 ' + hours + ' 小时 ' + minutes + ' 分钟 ' + seconds + ' 秒';
+    }
+
+    renderRuntime();
+    if (window.__libraRuntimeTimer) {
+      clearInterval(window.__libraRuntimeTimer);
+    }
+    window.__libraRuntimeTimer = setInterval(renderRuntime, 1000);
+  }
+
+  function initLibraHome() {
+    initTypewriter();
+    initRuntime();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLibraHome);
+  } else {
+    initLibraHome();
+  }
+  document.addEventListener('pjax:success', initLibraHome);
+})();
+</script>
 
 </body>
 </html>

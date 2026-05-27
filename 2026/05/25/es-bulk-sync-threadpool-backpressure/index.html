@@ -121,6 +121,11 @@
     <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
 
   </li>
+        <li class="menu-item menu-item-文章">
+
+    <a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>文章</a>
+
+  </li>
         <li class="menu-item menu-item-tags">
 
     <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
@@ -171,7 +176,7 @@
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="image" content="/images/IMG_1578.jpeg">
       <meta itemprop="name" content="Libra">
-      <meta itemprop="description" content="">
+      <meta itemprop="description" content="记录技术、项目与思考">
     </span>
 
     <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
@@ -203,6 +208,13 @@
             </span>
 
           
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
 
         </div>
       </header>
@@ -420,7 +432,7 @@
     <img class="site-author-image" itemprop="image" alt="Libra"
       src="/images/IMG_1578.jpeg">
   <p class="site-author-name" itemprop="name">Libra</p>
-  <div class="site-description" itemprop="description"></div>
+  <div class="site-description" itemprop="description">记录技术、项目与思考</div>
 </div>
 <div class="site-state-wrap motion-element">
   <nav class="site-state">
@@ -445,6 +457,11 @@
       </div>
   </nav>
 </div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Moyu-Yunru" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Moyu-Yunru" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
 
 
 
@@ -474,9 +491,33 @@
   <span class="author" itemprop="copyrightHolder">Libra</span>
 </div>
   <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
-  </div>
+  </div><div class="libra-footer-extra">
+  <span>共撰写了 3 篇文章</span>
+  <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
+</div>
+
 
         
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
 
 
 
@@ -545,6 +586,96 @@ NexT.utils.loadComments(document.querySelector('#gitalk-container'), () => {
     gitalk.render('gitalk-container');
   }, window.Gitalk);
 });
+</script>
+<script>
+(function() {
+  var phrases = [
+    '记录学习，也记录问题的答案',
+    '沉淀后端工程、分布式系统与搜索实践',
+    '把零散经验整理成可以复用的文章',
+    '保持好奇，长期写作'
+  ];
+
+  function initTypewriter() {
+    var target = document.querySelector('[data-libra-typewriter]');
+    if (!target) return;
+
+    if (window.__libraTypewriterTimer) {
+      clearTimeout(window.__libraTypewriterTimer);
+    }
+
+    var phraseIndex = 0;
+    var charIndex = 0;
+    var deleting = false;
+
+    function tick() {
+      var current = phrases[phraseIndex];
+      target.textContent = current.slice(0, charIndex);
+
+      if (!deleting && charIndex < current.length) {
+        charIndex += 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 88);
+        return;
+      }
+
+      if (!deleting && charIndex === current.length) {
+        deleting = true;
+        window.__libraTypewriterTimer = setTimeout(tick, 1600);
+        return;
+      }
+
+      if (deleting && charIndex > 0) {
+        charIndex -= 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 42);
+        return;
+      }
+
+      deleting = false;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      window.__libraTypewriterTimer = setTimeout(tick, 420);
+    }
+
+    tick();
+  }
+
+  function initRuntime() {
+    var runtime = document.getElementById('libra-site-runtime');
+    if (!runtime) return;
+
+    var start = new Date(runtime.getAttribute('data-start')).getTime();
+    if (!start) return;
+
+    function renderRuntime() {
+      var diff = Math.max(0, Date.now() - start);
+      var seconds = Math.floor(diff / 1000);
+      var days = Math.floor(seconds / 86400);
+      seconds %= 86400;
+      var hours = Math.floor(seconds / 3600);
+      seconds %= 3600;
+      var minutes = Math.floor(seconds / 60);
+      seconds %= 60;
+      runtime.textContent = days + ' 天 ' + hours + ' 小时 ' + minutes + ' 分钟 ' + seconds + ' 秒';
+    }
+
+    renderRuntime();
+    if (window.__libraRuntimeTimer) {
+      clearInterval(window.__libraRuntimeTimer);
+    }
+    window.__libraRuntimeTimer = setInterval(renderRuntime, 1000);
+  }
+
+  function initLibraHome() {
+    initTypewriter();
+    initRuntime();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLibraHome);
+  } else {
+    initLibraHome();
+  }
+  document.addEventListener('pjax:success', initLibraHome);
+})();
 </script>
 
 </body>
