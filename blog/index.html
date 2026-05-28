@@ -165,6 +165,214 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/28/llm-basics-learning-notes/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2026/05/28/llm-basics-learning-notes/" class="post-title-link" itemprop="url">大语言模型基础学习笔记：从预测下一个词到构建可靠应用</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2026-05-28 18:17:34 / 修改时间：18:25:25" itemprop="dateCreated datePublished" datetime="2026-05-28T18:17:34+08:00">2026-05-28</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8E%A2%E7%B4%A2AI-Agents/" itemprop="url" rel="index"><span itemprop="name">探索AI-Agents</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>最近在补大语言模型的基础知识。刚开始看这类材料时，我很容易被一堆名词淹没：N-gram、RNN、LSTM、Transformer、Tokenizer、Scaling Laws、幻觉、RAG。它们看起来像是分散的技术点，但如果顺着一条主线看，其实会清楚很多。</p>
+<p>这条主线就是：语言模型本质上是在根据已有上下文预测下一个词元。模型能力的演进，基本都围绕“怎样更好地理解上下文、怎样更高效地学习语言规律、怎样更可靠地生成结果”展开。</p>
+<h2 id="一、先理解语言模型在做什么"><a href="#一、先理解语言模型在做什么" class="headerlink" title="一、先理解语言模型在做什么"></a>一、先理解语言模型在做什么</h2><p>语言模型的核心任务，是计算一个词序列出现的概率。换句话说，它要判断一句话在语言上是否自然，也要能根据前文推测后面最可能出现的内容。</p>
+<p>早期的统计语言模型会把一句话拆成多个条件概率相乘。例如，一个句子可以近似看成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">P(w1, w2, ..., wm)</span><br><span class="line">= P(w1) * P(w2|w1) * ... * P(wm|w1, ..., wm-1)</span><br></pre></td></tr></table></figure>
+
+<p>直接计算完整历史几乎不可行，因为上下文组合太多，很多组合在语料里根本没出现过。于是 N-gram 模型引入了马尔可夫假设：预测当前词时，只看前面有限的几个词。</p>
+<p><img src="/images/llm-basics/1757249275674-0.png" alt="马尔可夫假设"></p>
+<p><em>图 1：N-gram 用有限上下文近似完整历史。</em></p>
+<p>例如 Bigram 只看前一个词，Trigram 只看前两个词。它的好处是简单、可解释，坏处也很明显：</p>
+<ol>
+<li>数据稀疏。没见过的词组概率容易被估成 0。</li>
+<li>泛化能力差。模型不知道 <code>agent</code> 和 <code>robot</code> 在语义上可能相近。</li>
+<li>上下文太短。窗口之外的信息会被直接丢掉。</li>
+</ol>
+<p>所以，语言模型需要从“数词频”走向“学表示”。</p>
+<h2 id="二、词嵌入：把离散的词放进连续空间"><a href="#二、词嵌入：把离散的词放进连续空间" class="headerlink" title="二、词嵌入：把离散的词放进连续空间"></a>二、词嵌入：把离散的词放进连续空间</h2><p>神经网络语言模型解决问题的第一步，是把词变成向量。词向量也叫词嵌入，它把每个词映射到一个高维连续空间里。语义相近的词，向量位置也会更接近。</p>
+<p><img src="/images/llm-basics/1757249275674-1.png" alt="神经网络语言模型"></p>
+<p><em>图 2：神经网络语言模型会在训练中学习词嵌入。</em></p>
+<p>有了词向量，模型就不再把词当成完全孤立的符号。它可以通过向量之间的距离或夹角理解相似性。经典例子是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">vector(&quot;king&quot;) - vector(&quot;man&quot;) + vector(&quot;woman&quot;) ≈ vector(&quot;queen&quot;)</span><br></pre></td></tr></table></figure>
+
+<p>这个例子不重要的是具体数字，重要的是它说明了一个思想：模型可以在向量空间中学到某些抽象关系，比如性别、身份、语义类别。</p>
+<p>但早期神经网络语言模型仍然有一个问题：上下文窗口通常是固定的。它比 N-gram 更会泛化，却还是不能很好地处理很长的依赖关系。</p>
+<h2 id="三、RNN-与-LSTM：给模型加上记忆"><a href="#三、RNN-与-LSTM：给模型加上记忆" class="headerlink" title="三、RNN 与 LSTM：给模型加上记忆"></a>三、RNN 与 LSTM：给模型加上记忆</h2><p>循环神经网络 RNN 的思路很自然：既然语言是一个序列，那模型就按顺序读，每读一个词就更新一次隐藏状态。这个隐藏状态可以理解成模型的短期记忆。</p>
+<p><img src="/images/llm-basics/1757249275674-2.png" alt="RNN 结构"></p>
+<p><em>图 3：RNN 通过隐藏状态在序列中传递信息。</em></p>
+<p>RNN 比固定窗口模型更灵活，因为它理论上可以把前面的信息一路传到后面。但实际训练时，它会遇到长期依赖问题。序列越长，反向传播路径越长，梯度就越容易消失或爆炸。结果是，模型很难真正记住很早之前的信息。</p>
+<p>LSTM 在 RNN 的基础上引入了细胞状态和门控机制。遗忘门决定丢掉什么，输入门决定写入什么，输出门决定暴露什么。这样一来，信息可以更稳定地在长序列里流动。</p>
+<p>不过，RNN 和 LSTM 都有一个绕不开的瓶颈：它们必须按顺序处理序列。第 t 步依赖第 t-1 步，天然不适合大规模并行训练。这也就引出了 Transformer。</p>
+<h2 id="四、Transformer：用注意力替代循环"><a href="#四、Transformer：用注意力替代循环" class="headerlink" title="四、Transformer：用注意力替代循环"></a>四、Transformer：用注意力替代循环</h2><p>Transformer 的关键变化，是抛弃循环结构，改用注意力机制来建模词元之间的关系。这样模型可以一次性看到整个序列，并并行计算不同位置之间的关联。</p>
+<p>最初的 Transformer 采用 Encoder-Decoder 架构，常见于机器翻译这类任务。</p>
+<p><img src="/images/llm-basics/1757249275674-3.png" alt="Transformer 架构"></p>
+<p><em>图 4：Transformer 由编码器和解码器组成。</em></p>
+<p>可以把它理解成两个角色：</p>
+<ol>
+<li>编码器负责理解输入，把每个词元变成带上下文信息的表示。</li>
+<li>解码器负责生成输出，根据已经生成的内容和编码器结果预测下一个词元。</li>
+</ol>
+<p>真正让 Transformer 强大的，是自注意力机制。</p>
+<h2 id="五、自注意力：让每个词主动寻找上下文"><a href="#五、自注意力：让每个词主动寻找上下文" class="headerlink" title="五、自注意力：让每个词主动寻找上下文"></a>五、自注意力：让每个词主动寻找上下文</h2><p>阅读一句话时，我们不会孤立地看每个词。例如看到 “The agent learns because it is intelligent” 里的 <code>it</code>，我们会自然回看前面的 <code>agent</code>。自注意力就是把这种“回看上下文”的过程数学化。</p>
+<p>每个词元会被映射成三个向量：</p>
+<ol>
+<li>Query：当前词要查询什么。</li>
+<li>Key：其他词能提供什么索引。</li>
+<li>Value：其他词实际携带什么信息。</li>
+</ol>
+<p>自注意力的计算可以简化成四步：</p>
+<ol>
+<li>用当前词的 Query 和所有词的 Key 计算相关性。</li>
+<li>对相关性分数做缩放，避免数值过大。</li>
+<li>用 Softmax 得到注意力权重。</li>
+<li>用这些权重对 Value 加权求和，得到当前词的新表示。</li>
+</ol>
+<p>公式写成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Attention(Q, K, V) = softmax(QK^T / sqrt(dk))V</span><br></pre></td></tr></table></figure>
+
+<p>单头注意力只能从一个角度看上下文。多头注意力则像让多个观察者同时工作：有的头关注指代关系，有的头关注句法关系，有的头关注局部搭配。最后再把这些结果合并。</p>
+<p><img src="/images/llm-basics/1757249275674-4.png" alt="多头注意力"></p>
+<p><em>图 5：多头注意力让模型从多个表示空间理解上下文。</em></p>
+<p>Transformer 里还有几个重要组件：</p>
+<ol>
+<li>位置编码：自注意力本身不知道顺序，所以需要额外注入位置信息。</li>
+<li>前馈网络：对每个位置的表示继续做非线性变换，提取更高阶特征。</li>
+<li>残差连接：让深层网络里的梯度更容易传递。</li>
+<li>层归一化：稳定每一层的输入分布，提升训练稳定性。</li>
+</ol>
+<p>这些模块组合起来，才构成了现代大模型的基础骨架。</p>
+<h2 id="六、为什么很多大模型是-Decoder-Only"><a href="#六、为什么很多大模型是-Decoder-Only" class="headerlink" title="六、为什么很多大模型是 Decoder-Only"></a>六、为什么很多大模型是 Decoder-Only</h2><p>今天常见的 GPT、Llama、Qwen 等生成式模型，大多采用 Decoder-Only 思路。它只保留 Transformer 的解码器部分，把目标统一成一件事：预测下一个词元。</p>
+<p>这个过程也叫自回归生成：</p>
+<ol>
+<li>用户给出一段输入。</li>
+<li>模型预测下一个最可能的词元。</li>
+<li>把刚生成的词元接回上下文。</li>
+<li>重复预测，直到生成完整回答或触发停止条件。</li>
+</ol>
+<p>这里有个关键细节：模型训练时不能偷看未来答案。所以 Decoder-Only 会使用掩码自注意力，把当前位置之后的词元遮住。这样模型在预测第 t 个词元时，只能依赖第 t 个词元之前的信息。</p>
+<p>Decoder-Only 架构简单、目标统一、容易扩展，也天然适合对话、写作、代码生成等任务。这也是它能成为通用大语言模型主流路线的重要原因。</p>
+<h2 id="七、和大模型交互：Prompt-与采样参数"><a href="#七、和大模型交互：Prompt-与采样参数" class="headerlink" title="七、和大模型交互：Prompt 与采样参数"></a>七、和大模型交互：Prompt 与采样参数</h2><p>理解模型结构之后，再看 Prompt 会更容易。提示词不是魔法，它本质上是在给模型提供上下文、任务边界和输出格式。</p>
+<p>常见提示方式可以按示例数量分成三类：</p>
+<ol>
+<li>零样本提示：只给任务，不给示例。</li>
+<li>单样本提示：给一个输入输出示例，让模型模仿格式。</li>
+<li>少样本提示：给多个示例，让模型理解边界和风格。</li>
+</ol>
+<p>指令调优之后，模型更擅长理解自然语言命令，所以我们可以直接写“请总结下面的内容”或者“请用 JSON 输出结果”。但在复杂任务里，示例依然很有用，尤其是格式抽取、分类、风格迁移这类场景。</p>
+<p>采样参数决定模型如何从概率分布里选择下一个词元：</p>
+<ol>
+<li>Temperature 控制随机性。低温度更稳定，高温度更发散。</li>
+<li>Top-k 只保留概率最高的 k 个候选词元。</li>
+<li>Top-p 保留累计概率达到 p 的最小候选集合。</li>
+</ol>
+<p>我的理解是：事实问答、代码生成、数据处理这类任务更适合低温度；头脑风暴、创意写作可以适当提高温度。Top-k 和 Top-p 通常不必同时调得很复杂，先从一个参数开始更容易观察效果。</p>
+<p>对于需要推理的问题，思维链提示也很常见。它的核心不是让模型“装作聪明”，而是让模型把中间步骤显式展开，方便我们检查它在哪一步出错。</p>
+<h2 id="八、Tokenizer：看不见但很重要的一层"><a href="#八、Tokenizer：看不见但很重要的一层" class="headerlink" title="八、Tokenizer：看不见但很重要的一层"></a>八、Tokenizer：看不见但很重要的一层</h2><p>模型不能直接处理自然语言，它实际处理的是 Token ID。分词器负责把文本切成词元，再映射成数字。</p>
+<p>最直观的分词方式有两种：</p>
+<ol>
+<li>按词切分：语义直观，但词表会非常大，也容易遇到未登录词。</li>
+<li>按字符切分：词表很小，但单个字符语义太弱，序列会变长。</li>
+</ol>
+<p>现代大模型普遍使用子词分词，在词和字符之间折中。常见词可以保留为完整词元，低频词可以拆成多个子词片段。</p>
+<p>BPE 是一种典型算法。它从字符级词表开始，每次合并出现频率最高的相邻片段，直到词表达到目标大小。</p>
+<p><img src="/images/llm-basics/1757249275674-5.png" alt="BPE 合并过程"></p>
+<p><em>图 6：BPE 通过不断合并高频片段构建词表。</em></p>
+<p>Tokenizer 对开发者很重要，原因有三个：</p>
+<ol>
+<li>上下文窗口按 Token 计算，不按汉字数、字符数或单词数计算。</li>
+<li>API 成本通常和输入输出 Token 数直接相关。</li>
+<li>分词结果会影响模型表现。同一段文本，多一个空格、大小写变化、符号变化，都可能切成不同的 Token 序列。</li>
+</ol>
+<p>所以写 Prompt 时，除了语义清楚，也要尽量保持格式稳定。</p>
+<h2 id="九、本地调用开源模型的意义"><a href="#九、本地调用开源模型的意义" class="headerlink" title="九、本地调用开源模型的意义"></a>九、本地调用开源模型的意义</h2><p>通过 API 调用大模型最方便，但本地部署开源模型也很值得学习。它能帮助我理解模型、分词器、显存、推理速度之间的关系，也适合隐私敏感或离线场景。</p>
+<p>使用 Hugging Face Transformers 时，最小实践路径大概是：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pip install transformers torch</span><br></pre></td></tr></table></figure>
+
+<p>然后用 <code>AutoTokenizer</code> 加载分词器，用 <code>AutoModelForCausalLM</code> 加载因果语言模型，再通过 <code>generate()</code> 生成结果。对于对话模型，还要注意使用对应的 chat template，把 system、user、assistant 这类角色格式化成模型训练时熟悉的输入格式。</p>
+<p>本地跑通一个小模型的意义，不在于它马上能替代线上模型，而在于能把“大模型调用”从黑盒变成半透明：输入如何变成 Token，Token 如何生成，输出如何解码，这些过程都会变得具体。</p>
+<h2 id="十、模型选型不要只看“最强”"><a href="#十、模型选型不要只看“最强”" class="headerlink" title="十、模型选型不要只看“最强”"></a>十、模型选型不要只看“最强”</h2><p>模型选型不是排行榜第一名就一定最好。实际项目里更常见的是在多个因素之间取舍：</p>
+<ol>
+<li>能力：推理、代码、中文、多模态、长文本，各模型侧重点不同。</li>
+<li>成本：闭源 API 按 Token 计费，开源部署则消耗硬件和运维成本。</li>
+<li>延迟：实时交互场景对响应速度非常敏感。</li>
+<li>上下文窗口：长文档、代码库分析、长期对话都依赖更大的上下文。</li>
+<li>部署方式：API 简单，本地部署更可控。</li>
+<li>生态：工具链、社区、微调方案和部署框架会影响开发效率。</li>
+<li>安全性：面向真实用户时，需要考虑幻觉、偏见、越权调用和敏感信息泄露。</li>
+</ol>
+<p>所以我更愿意把模型选型看成工程问题，而不是单纯的模型能力竞赛。先明确任务，再确定约束，最后才是比较模型。</p>
+<h2 id="十一、缩放法则与模型局限"><a href="#十一、缩放法则与模型局限" class="headerlink" title="十一、缩放法则与模型局限"></a>十一、缩放法则与模型局限</h2><p>大语言模型能力提升的背后，有一个重要经验规律：模型参数量、训练数据量和计算量增加时，模型损失通常会按可预测的趋势下降。这就是缩放法则。</p>
+<p>但后来的研究也提醒我们，不能只堆参数。给定计算预算时，模型大小和训练数据量需要匹配。一个参数更少、数据更充分的模型，可能比一个更大但训练不足的模型表现更好。</p>
+<p>模型变大后，还会出现一些小模型不明显的能力，比如更好的指令遵循、多步推理、代码生成和链式思考。但这并不意味着模型真正“无所不知”。它仍然有明显局限：</p>
+<ol>
+<li>幻觉：模型可能编造事实，并且表达得很自信。</li>
+<li>知识时效性：模型不知道训练数据之后发生的新事实。</li>
+<li>偏见：训练数据里的社会偏见可能被模型学习并放大。</li>
+<li>推理不稳定：复杂任务中，中间一步出错会影响最终答案。</li>
+</ol>
+<p>从应用角度看，缓解这些问题不能只靠“写一个更好的 Prompt”。更可靠的做法是给模型接入外部知识和工具，比如 RAG、搜索、计算器、代码执行器、数据库查询和人工审核流程。</p>
+<h2 id="十二、这次学习后的理解"><a href="#十二、这次学习后的理解" class="headerlink" title="十二、这次学习后的理解"></a>十二、这次学习后的理解</h2><p>读完这部分内容后，我对大语言模型的理解从“会聊天的黑盒”变得更具体了。</p>
+<p>从 N-gram 到词嵌入，是从统计计数走向语义表示；从 RNN 到 Transformer，是从顺序记忆走向并行注意力；从 Encoder-Decoder 到 Decoder-Only，是把生成任务统一成预测下一个词元；从 Prompt 到 Tokenizer，是理解我们如何把任务交给模型；从缩放法则到幻觉问题，则提醒我模型越强，工程约束和验证机制越重要。</p>
+<p>如果后续要继续学习智能体，这些基础会很有用。因为 Agent 的规划、记忆、工具调用和结果校验，最后都绕不开这些问题：模型看到了什么上下文，如何生成下一步，什么时候会不可靠，以及我们该如何把它放进一个更稳的系统里。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
     <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/25/es-bulk-sync-threadpool-backpressure/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -797,20 +1005,20 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">3</span>
+          <span class="site-state-item-count">4</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
       <div class="site-state-item site-state-categories">
             <a href="/categories/">
           
-        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-count">2</span>
         <span class="site-state-item-name">分类</span></a>
       </div>
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">6</span>
+        <span class="site-state-item-count">8</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
@@ -853,7 +1061,7 @@
 </div>
 
 <div class="libra-footer-extra">
-  <span>共撰写了 3 篇文章</span>
+  <span>共撰写了 4 篇文章</span>
   <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
 </div>
 
