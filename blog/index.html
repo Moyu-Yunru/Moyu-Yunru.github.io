@@ -165,6 +165,191 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/28/llm-architecture-encoder-decoder-notes/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2026/05/28/llm-architecture-encoder-decoder-notes/" class="post-title-link" itemprop="url">大语言模型基础补充：Encoder-only 与 Decoder-only 到底差在哪</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2026-05-28 21:45:21 / 修改时间：22:04:15" itemprop="dateCreated datePublished" datetime="2026-05-28T21:45:21+08:00">2026-05-28</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8E%A2%E7%B4%A2AI-Agents/" itemprop="url" rel="index"><span itemprop="name">探索AI-Agents</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>上一篇整理大语言模型基础时，我把重点放在了“从语言模型到 Transformer，再到 Decoder-Only 大模型”这条主线上。后来又想到几个更具体的问题：</p>
+<ol>
+<li>BERT 这种 Encoder-only 架构和 Llama 这种 Decoder-only 架构到底差在哪里？</li>
+<li>自回归模型在训练和 prefill 时都能并行处理整段序列，因果掩码是如何同时保证计算效率和信息不泄露的？</li>
+<li>既然 Encoder 能双向看上下文，为什么今天通用对话模型反而主要是 Decoder-only？</li>
+</ol>
+<p>这些问题很容易混在一起。整理之后，我发现关键不是简单地说“谁更先进”，而是要看它们解决的任务不同。</p>
+<h2 id="一、先把几个容易混淆的点放在前面"><a href="#一、先把几个容易混淆的点放在前面" class="headerlink" title="一、先把几个容易混淆的点放在前面"></a>一、先把几个容易混淆的点放在前面</h2><p>在展开之前，先把几个概念边界放清楚，否则后面很容易把不同架构混在一起。</p>
+<p>第一，BERT 和 Llama 代表的是两条不同路线。BERT 是 Encoder-only 的代表，擅长文本理解和表征；Llama 是 Decoder-only 的代表，擅长自回归生成。但如果细分模型谱系，要注意 RoBERTa 是 Meta 基于 BERT 思路改进的模型，DistilBERT 主要来自 Hugging Face，TinyBERT 来自其他研究团队，它们不能笼统归成 Google 官方版本。</p>
+<p>第二，纯自回归模型也叫 CausalLM。它的核心规则是因果掩码：当前位置只能关注自己和之前的位置。这个规则不只在推理生成时存在，在训练、prefill 和 decode 阶段都存在。</p>
+<p>第三，Decoder-only 模型能利用完整 prompt，并不等于 prompt 里的每个早期 token 都获得了双向上下文。更准确地说，是生成下一个 token 的最后位置可以条件化整段已经输入的 prompt。</p>
+<p>第四，PrefixLM 和 CausalLM 不是一回事。PrefixLM 可以让前缀部分使用类似 Encoder 的双向注意力，再让生成部分使用自回归掩码；但 Llama、GPT、Qwen 这类主流生成模型通常按 CausalLM 来理解，prompt 部分也遵守单向因果掩码。</p>
+<p>第五，“Encoder 不火了”这个说法不准确。Encoder 只是退出了通用聊天模型的中心舞台，但在 Embedding、Rerank、分类、NER、检索、视觉编码、多模态表征等任务中依然很常见。</p>
+<h2 id="二、Encoder-only：为了理解整段输入"><a href="#二、Encoder-only：为了理解整段输入" class="headerlink" title="二、Encoder-only：为了理解整段输入"></a>二、Encoder-only：为了理解整段输入</h2><p>BERT 的核心思路是：如果任务是理解文本，而不是从左到右写文本，那么模型最好能同时看到一个词的左边和右边。</p>
+<p>比如“苹果”这个词：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">我去了苹果店，买了一部新手机。</span><br><span class="line">我去了超市，买了一个红苹果。</span><br></pre></td></tr></table></figure>
+
+<p>如果模型只能从左往右读，读到“苹果”时还不知道后面是“店”还是别的词，就很难立刻判断含义。Encoder-only 架构不使用 causal mask，因此每个 token 都可以和整句里的所有 token 做 self-attention。经过多层 Transformer Encoder 之后，每个位置的输出向量都包含了全局上下文信息。</p>
+<p>BERT 的训练目标是 Masked Language Modeling，也就是完形填空。它会随机选中一部分 token，让模型根据左右上下文预测被遮住的内容。</p>
+<p>这带来了一个很直接的优势：Encoder 生成的是高质量的上下文表征。它很适合做这些任务：</p>
+<ol>
+<li>文本分类：判断情感、意图、主题。</li>
+<li>命名实体识别：找出人名、地名、组织名等。</li>
+<li>句子匹配：判断两段文本是否相似、是否蕴含。</li>
+<li>向量表征：把文本编码成 embedding，用于检索或聚类。</li>
+<li>Rerank：对召回结果做更精细的相关性排序。</li>
+</ol>
+<p>所以 Encoder-only 可以理解为“阅读理解专家”。它不擅长连续开放式生成，但很擅长把输入读透。</p>
+<h2 id="三、Decoder-only：为了持续生成下一个-token"><a href="#三、Decoder-only：为了持续生成下一个-token" class="headerlink" title="三、Decoder-only：为了持续生成下一个 token"></a>三、Decoder-only：为了持续生成下一个 token</h2><p>Decoder-only 的目标更统一：预测下一个 token。</p>
+<p>训练时，模型拿到一段文本：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我 喜欢 吃 苹果</span><br></pre></td></tr></table></figure>
+
+<p>实际优化目标可以理解成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">看到「我」       -&gt; 预测「喜欢」</span><br><span class="line">看到「我 喜欢」   -&gt; 预测「吃」</span><br><span class="line">看到「我 喜欢 吃」 -&gt; 预测「苹果」</span><br></pre></td></tr></table></figure>
+
+<p>为了提高训练效率，Transformer 不会真的一个 token 一个 token 地串行训练，而是把整个序列一次性送进去并行计算。真正需要解释的是：模型如何在并行计算整段序列的同时，仍然保持“当前位置只能依赖历史信息”的自回归约束？</p>
+<p>关键就在因果掩码。</p>
+<p>注意力矩阵可以想象成这样：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">当前位置 \ 可关注位置    我    喜欢    吃    苹果</span><br><span class="line">我                    可见   屏蔽   屏蔽   屏蔽</span><br><span class="line">喜欢                  可见   可见   屏蔽   屏蔽</span><br><span class="line">吃                    可见   可见   可见   屏蔽</span><br><span class="line">苹果                  可见   可见   可见   可见</span><br></pre></td></tr></table></figure>
+
+<p>这个掩码会在 Softmax 之前把未来位置的注意力分数设成一个极小值，经过 Softmax 后权重接近 0。这样每个位置只能聚合自己及其之前的信息。</p>
+<p>这里还要补一层：模型通常不是用第 t 个位置去预测它自己，而是用第 t 个位置的输出去预测第 t+1 个 token。也就是“标签右移”。这就是 causal language modeling 的基本训练方式。</p>
+<h2 id="四、位置编码不会泄露未来内容"><a href="#四、位置编码不会泄露未来内容" class="headerlink" title="四、位置编码不会泄露未来内容"></a>四、位置编码不会泄露未来内容</h2><p>位置编码只告诉模型“这个 token 在第几个位置”，不告诉模型“后面那个位置的内容是什么”。</p>
+<p>可以把位置编码理解成座位号：</p>
+<ol>
+<li>没有位置编码时，模型很难区分“我 喜欢 吃 苹果”和“苹果 吃 喜欢 我”。</li>
+<li>有位置编码时，模型知道每个 token 的顺序。</li>
+<li>但如果 causal mask 屏蔽了后面的位置，模型仍然拿不到后面 token 的语义内容。</li>
+</ol>
+<p>所以，位置编码解决的是顺序感；因果掩码控制的是信息流方向。两者并不矛盾。</p>
+<h2 id="五、prefill-阶段到底发生了什么"><a href="#五、prefill-阶段到底发生了什么" class="headerlink" title="五、prefill 阶段到底发生了什么"></a>五、prefill 阶段到底发生了什么</h2><p>这个问题最容易混淆。</p>
+<p>假设用户输入：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我去了苹果店，买了一部新手机。请翻译成英文。</span><br></pre></td></tr></table></figure>
+
+<p>Decoder-only 模型在 prefill 阶段会一次性处理整段 prompt。这个“一次性”指的是工程上的并行计算，并不代表注意力变成了双向。</p>
+<p>在纯正的自回归模型中，因果掩码是 Self-Attention 里的硬性规则。无论是训练、prefill，还是 decode，它都不会消失。也就是说：</p>
+<ol>
+<li>处理“我”时，它只能看到“我”。</li>
+<li>处理“苹果”时，它的隐藏状态只能融合“我”“去”“苹果”这些前文信息。</li>
+<li>“苹果”这个位置本身看不到后面的“店”和“手机”。</li>
+</ol>
+<p>所以，早期 token 并不会因为整段 prompt 已经输入了，就突然获得双向上下文。它们依然只能看历史。</p>
+<p>那模型为什么仍然能翻译对？</p>
+<p>因为最终用于预测回答第一个 token 的位置，是 prompt 的末尾位置。这个位置排在整个 prompt 的最后，因此它的 Query 被允许关注前面所有输入 token 的 Key 和 Value。</p>
+<p>换句话说，最后位置的隐藏状态像一个漏斗，会汇聚整段 prompt 中已经出现过的信息。它可以同时关注到“苹果”“店”“新手机”“请翻译成英文”这些位置，然后以这个末尾隐藏状态为基础，生成回答的第一个 token。</p>
+<p>后续生成出来的每一个新 token，也都会排在序列更靠后的位置，因此它们同样能看到完整 prompt 和此前已经生成的内容。</p>
+<p>换句话说：</p>
+<ol>
+<li>早期 token 的表示不是双向的。</li>
+<li>生成答案的当前位置可以看到完整 prompt。</li>
+<li>Decoder-only 的“理解整段输入”，主要体现在输出位置对整段历史的条件化上。</li>
+</ol>
+<p>这和 Encoder-only 的双向表征不是一回事。Encoder 是每个 token 都能同时看左右上下文；Decoder 是每个位置只能看历史，但当 prompt 已经完整输入后，末尾生成位置的历史已经包含整段 prompt。</p>
+<p>这里也可以顺手区分一下 PrefixLM。PrefixLM 会把输入分成“前缀区”和“生成区”：前缀区内部可以使用双向注意力，生成区再使用自回归注意力。因此，PrefixLM 中 prompt 部分确实可能获得类似 Encoder 的全局视野。但 CausalLM 不这样做。在 Llama、GPT、Qwen 这类主流自回归模型里，即使是 prompt 部分，也严格遵守单向因果掩码。</p>
+<h2 id="六、为什么通用大模型主要走-Decoder-only"><a href="#六、为什么通用大模型主要走-Decoder-only" class="headerlink" title="六、为什么通用大模型主要走 Decoder-only"></a>六、为什么通用大模型主要走 Decoder-only</h2><p>既然 Encoder 能双向看上下文，为什么 ChatGPT、Llama、Qwen 这类通用模型主要走 Decoder-only？</p>
+<p>我现在的理解是，原因主要有四个。</p>
+<p>第一，生成任务天然匹配自回归。聊天、写作、代码生成、工具调用计划，本质上都可以统一成“基于已有上下文生成下一步”。Decoder-only 的训练目标和使用方式非常一致。</p>
+<p>第二，预训练数据利用方式简单。互联网上有海量无标注文本，直接做 next token prediction 就可以训练，不需要人工标注任务标签。</p>
+<p>第三，模型规模扩大后，next token prediction 会逼迫模型学习很多隐含结构。为了预测后文，模型需要学习语法、事实、常识、代码模式、推理模板和人类表达习惯。不能说它一定形成了真正的人类式理解，但这个目标确实非常适合规模化。</p>
+<p>第四，自回归模型很适合上下文学习。给它几个示例，它可以顺着上下文继续生成符合格式的答案。这让很多任务不必每次都微调模型。当然，“不必每次微调”不等于“微调被淘汰”。在特定领域、稳定格式、高一致性要求的场景里，微调、RAG、工具调用和评估流程仍然很重要。</p>
+<p>所以 Decoder-only 不是因为它在所有方面都比 Encoder 更好，而是因为它更适合做一个统一的生成接口。</p>
+<h2 id="七、Encoder-现在仍然有价值"><a href="#七、Encoder-现在仍然有价值" class="headerlink" title="七、Encoder 现在仍然有价值"></a>七、Encoder 现在仍然有价值</h2><p>Encoder 不是过时了，而是分工变了。</p>
+<p>在很多工程系统里，Encoder 仍然很适合承担“理解、编码、排序、对齐”的角色。例如：</p>
+<ol>
+<li>向量检索：用 embedding 模型把文档和查询编码成向量。</li>
+<li>语义排序：用 cross-encoder 或 reranker 精排候选结果。</li>
+<li>分类抽取：对短文本做意图识别、实体识别、风险分类。</li>
+<li>多模态系统：用视觉 encoder 把图像变成可供语言模型使用的特征。</li>
+<li>RAG 系统：检索、召回、重排、去重这些环节经常依赖 encoder 或 encoder-like 模型。</li>
+</ol>
+<p>如果把 Decoder-only 看成负责“表达和行动”的模型，那么 Encoder 更像负责“读懂和压缩输入”的模型。Agent 系统里，这两类能力经常是一起出现的。</p>
+<h2 id="八、模型谱系的简要记法"><a href="#八、模型谱系的简要记法" class="headerlink" title="八、模型谱系的简要记法"></a>八、模型谱系的简要记法</h2><p>为了后面复习方便，我把常见模型按架构粗略记一下。</p>
+<p>Encoder-only 代表：</p>
+<ol>
+<li>BERT-Base：12 层 Encoder，约 110M 参数。</li>
+<li>BERT-Large：24 层 Encoder，约 340M 参数。</li>
+<li>mBERT、Chinese BERT：Google 官方多语言和中文版本。</li>
+<li>RoBERTa、ALBERT、DistilBERT、TinyBERT：BERT 思路下的改进、压缩或训练策略变化，需要注意它们不都来自 Google。</li>
+</ol>
+<p>Decoder-only 代表：</p>
+<ol>
+<li>GPT 系列：公开资料中，GPT-4 仍是 Transformer-style、next-token prediction 路线；至于更新闭源模型的内部细节，不应在没有公开资料时过度断言。</li>
+<li>Llama 系列：Meta 的开源权重大模型路线，从 Llama 1 到 Llama 3.x，再到 Llama 4 引入 MoE 和原生多模态。</li>
+<li>Qwen、DeepSeek、Mistral 等：许多通用生成模型也主要采用 Decoder-only 或以自回归生成作为核心输出机制。</li>
+</ol>
+<p>Llama 系列里有几个节点值得记：</p>
+<ol>
+<li>Llama 1：7B、13B、33B、65B，主要面向研究。</li>
+<li>Llama 2：7B、13B、70B，加入 Chat 版本和更明确的商用许可。</li>
+<li>Llama 3：8B、70B，训练数据和 tokenizer 都有明显升级。</li>
+<li>Llama 3.1：8B、70B、405B，上下文窗口提升到 128K，并强化多语言和工具使用能力。</li>
+<li>Llama 3.2：加入 1B、3B 轻量文本模型，以及 11B、90B 视觉模型。</li>
+<li>Llama 4：Scout 和 Maverick 是 MoE、原生多模态模型；Scout 是 17B active、16 experts、109B total，并支持 10M 级上下文。Maverick 是 17B active、128 experts、400B total。Behemoth 在发布时是预览中的教师模型。</li>
+</ol>
+<h2 id="九、最后的理解"><a href="#九、最后的理解" class="headerlink" title="九、最后的理解"></a>九、最后的理解</h2><p>这次补充让我对“模型架构”这件事少了一点二选一的执念。</p>
+<p>Encoder-only 的核心是双向理解，它把输入压缩成高质量表征。Decoder-only 的核心是自回归生成，它把已有上下文不断延展成新的内容。一个更像阅读理解，一个更像连续写作。</p>
+<p>今天通用大模型主要使用 Decoder-only，并不代表 Encoder 没价值。真正做应用时，尤其是 Agent 或 RAG 系统，经常需要两者协作：Encoder 负责把资料找准、排好、压缩好，Decoder 负责根据上下文推理、生成、调用工具和解释结果。</p>
+<p>所以我后续再看 Agent 架构时，会更关注一个问题：系统里的每一步到底是在做“理解与检索”，还是在做“生成与行动”。这个区分，比单纯记住某个模型名字更有用。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
     <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/28/llm-basics-learning-notes/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -190,7 +375,7 @@
               <span class="post-meta-item-text">发表于</span>
               
 
-              <time title="创建时间：2026-05-28 18:17:34 / 修改时间：18:25:25" itemprop="dateCreated datePublished" datetime="2026-05-28T18:17:34+08:00">2026-05-28</time>
+              <time title="创建时间：2026-05-28 18:17:34 / 修改时间：21:46:37" itemprop="dateCreated datePublished" datetime="2026-05-28T18:17:34+08:00">2026-05-28</time>
             </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -354,6 +539,7 @@
 <h2 id="十二、这次学习后的理解"><a href="#十二、这次学习后的理解" class="headerlink" title="十二、这次学习后的理解"></a>十二、这次学习后的理解</h2><p>读完这部分内容后，我对大语言模型的理解从“会聊天的黑盒”变得更具体了。</p>
 <p>从 N-gram 到词嵌入，是从统计计数走向语义表示；从 RNN 到 Transformer，是从顺序记忆走向并行注意力；从 Encoder-Decoder 到 Decoder-Only，是把生成任务统一成预测下一个词元；从 Prompt 到 Tokenizer，是理解我们如何把任务交给模型；从缩放法则到幻觉问题，则提醒我模型越强，工程约束和验证机制越重要。</p>
 <p>如果后续要继续学习智能体，这些基础会很有用。因为 Agent 的规划、记忆、工具调用和结果校验，最后都绕不开这些问题：模型看到了什么上下文，如何生成下一步，什么时候会不可靠，以及我们该如何把它放进一个更稳的系统里。</p>
+<p>后面我又单独整理了一篇补充笔记，用来区分 Encoder-only 和 Decoder-only 架构，以及自回归训练里的因果掩码细节：<a href="/2026/05/28/llm-architecture-encoder-decoder-notes/">大语言模型基础补充：Encoder-only 与 Decoder-only 到底差在哪</a>。</p>
 
       
     </div>
@@ -1005,7 +1191,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">4</span>
+          <span class="site-state-item-count">5</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
@@ -1018,7 +1204,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">8</span>
+        <span class="site-state-item-count">10</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
@@ -1061,7 +1247,7 @@
 </div>
 
 <div class="libra-footer-extra">
-  <span>共撰写了 4 篇文章</span>
+  <span>共撰写了 5 篇文章</span>
   <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
 </div>
 
