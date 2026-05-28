@@ -28,9 +28,11 @@
 <meta property="og:description" content="上一篇整理大语言模型基础时，我把重点放在了“从语言模型到 Transformer，再到 Decoder-Only 大模型”这条主线上。后来又想到几个更具体的问题：  BERT 这种 Encoder-only 架构和 Llama 这种 Decoder-only 架构到底差在哪里？ 自回归模型在训练和 prefill 时都能并行处理整段序列，因果掩码是如何同时保证计算效率和信息不泄露的？ 既然 Enc">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2026-05-28T13:45:21.000Z">
-<meta property="article:modified_time" content="2026-05-28T14:04:15.518Z">
+<meta property="article:modified_time" content="2026-05-28T14:20:18.487Z">
 <meta property="article:author" content="Libra">
 <meta property="article:tag" content="BERT">
+<meta property="article:tag" content="Claude">
+<meta property="article:tag" content="GPT">
 <meta property="article:tag" content="Llama">
 <meta property="article:tag" content="Transformer">
 <meta property="article:tag" content="大语言模型">
@@ -196,7 +198,7 @@
               <span class="post-meta-item-text">发表于</span>
               
 
-              <time title="创建时间：2026-05-28 21:45:21 / 修改时间：22:04:15" itemprop="dateCreated datePublished" datetime="2026-05-28T21:45:21+08:00">2026-05-28</time>
+              <time title="创建时间：2026-05-28 21:45:21 / 修改时间：22:20:18" itemprop="dateCreated datePublished" datetime="2026-05-28T21:45:21+08:00">2026-05-28</time>
             </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -237,7 +239,7 @@
 <p>第一，BERT 和 Llama 代表的是两条不同路线。BERT 是 Encoder-only 的代表，擅长文本理解和表征；Llama 是 Decoder-only 的代表，擅长自回归生成。但如果细分模型谱系，要注意 RoBERTa 是 Meta 基于 BERT 思路改进的模型，DistilBERT 主要来自 Hugging Face，TinyBERT 来自其他研究团队，它们不能笼统归成 Google 官方版本。</p>
 <p>第二，纯自回归模型也叫 CausalLM。它的核心规则是因果掩码：当前位置只能关注自己和之前的位置。这个规则不只在推理生成时存在，在训练、prefill 和 decode 阶段都存在。</p>
 <p>第三，Decoder-only 模型能利用完整 prompt，并不等于 prompt 里的每个早期 token 都获得了双向上下文。更准确地说，是生成下一个 token 的最后位置可以条件化整段已经输入的 prompt。</p>
-<p>第四，PrefixLM 和 CausalLM 不是一回事。PrefixLM 可以让前缀部分使用类似 Encoder 的双向注意力，再让生成部分使用自回归掩码；但 Llama、GPT、Qwen 这类主流生成模型通常按 CausalLM 来理解，prompt 部分也遵守单向因果掩码。</p>
+<p>第四，PrefixLM 和 CausalLM 不是一回事。PrefixLM 可以让前缀部分使用类似 Encoder 的双向注意力，再让生成部分使用自回归掩码；但 Llama、Qwen 这类公开资料较多的主流生成模型通常按 CausalLM 来理解，prompt 部分也遵守单向因果掩码。GPT、Claude、Gemini 这类闭源前沿模型不一定公开完整内部结构，但从对话式生成、代码生成和工具调用的外部行为看，也可以先放在“自回归生成范式”下理解。</p>
 <p>第五，“Encoder 不火了”这个说法不准确。Encoder 只是退出了通用聊天模型的中心舞台，但在 Embedding、Rerank、分类、NER、检索、视觉编码、多模态表征等任务中依然很常见。</p>
 <h2 id="二、Encoder-only：为了理解整段输入"><a href="#二、Encoder-only：为了理解整段输入" class="headerlink" title="二、Encoder-only：为了理解整段输入"></a>二、Encoder-only：为了理解整段输入</h2><p>BERT 的核心思路是：如果任务是理解文本，而不是从左到右写文本，那么模型最好能同时看到一个词的左边和右边。</p>
 <p>比如“苹果”这个词：</p>
@@ -300,7 +302,7 @@
 </ol>
 <p>这和 Encoder-only 的双向表征不是一回事。Encoder 是每个 token 都能同时看左右上下文；Decoder 是每个位置只能看历史，但当 prompt 已经完整输入后，末尾生成位置的历史已经包含整段 prompt。</p>
 <p>这里也可以顺手区分一下 PrefixLM。PrefixLM 会把输入分成“前缀区”和“生成区”：前缀区内部可以使用双向注意力，生成区再使用自回归注意力。因此，PrefixLM 中 prompt 部分确实可能获得类似 Encoder 的全局视野。但 CausalLM 不这样做。在 Llama、GPT、Qwen 这类主流自回归模型里，即使是 prompt 部分，也严格遵守单向因果掩码。</p>
-<h2 id="六、为什么通用大模型主要走-Decoder-only"><a href="#六、为什么通用大模型主要走-Decoder-only" class="headerlink" title="六、为什么通用大模型主要走 Decoder-only"></a>六、为什么通用大模型主要走 Decoder-only</h2><p>既然 Encoder 能双向看上下文，为什么 ChatGPT、Llama、Qwen 这类通用模型主要走 Decoder-only？</p>
+<h2 id="六、为什么通用大模型主要走-Decoder-only"><a href="#六、为什么通用大模型主要走-Decoder-only" class="headerlink" title="六、为什么通用大模型主要走 Decoder-only"></a>六、为什么通用大模型主要走 Decoder-only</h2><p>既然 Encoder 能双向看上下文，为什么 ChatGPT、Llama、Qwen、Claude、Gemini 这类通用模型主要表现为自回归生成？</p>
 <p>我现在的理解是，原因主要有四个。</p>
 <p>第一，生成任务天然匹配自回归。聊天、写作、代码生成、工具调用计划，本质上都可以统一成“基于已有上下文生成下一步”。Decoder-only 的训练目标和使用方式非常一致。</p>
 <p>第二，预训练数据利用方式简单。互联网上有海量无标注文本，直接做 next token prediction 就可以训练，不需要人工标注任务标签。</p>
@@ -317,7 +319,7 @@
 <li>RAG 系统：检索、召回、重排、去重这些环节经常依赖 encoder 或 encoder-like 模型。</li>
 </ol>
 <p>如果把 Decoder-only 看成负责“表达和行动”的模型，那么 Encoder 更像负责“读懂和压缩输入”的模型。Agent 系统里，这两类能力经常是一起出现的。</p>
-<h2 id="八、模型谱系的简要记法"><a href="#八、模型谱系的简要记法" class="headerlink" title="八、模型谱系的简要记法"></a>八、模型谱系的简要记法</h2><p>为了后面复习方便，我把常见模型按架构粗略记一下。</p>
+<h2 id="八、模型谱系的简要记法"><a href="#八、模型谱系的简要记法" class="headerlink" title="八、模型谱系的简要记法"></a>八、模型谱系的简要记法</h2><p>为了后面复习方便，我把常见模型按架构和生成范式粗略记一下。这里需要先加一个时间戳：本文写于 2026-05-28，前沿模型更新很快，下面只按当时公开资料记录，不把没有公开的内部结构说死。</p>
 <p>Encoder-only 代表：</p>
 <ol>
 <li>BERT-Base：12 层 Encoder，约 110M 参数。</li>
@@ -325,11 +327,17 @@
 <li>mBERT、Chinese BERT：Google 官方多语言和中文版本。</li>
 <li>RoBERTa、ALBERT、DistilBERT、TinyBERT：BERT 思路下的改进、压缩或训练策略变化，需要注意它们不都来自 Google。</li>
 </ol>
-<p>Decoder-only 代表：</p>
+<p>典型 Decoder-only &#x2F; CausalLM 代表：</p>
 <ol>
-<li>GPT 系列：公开资料中，GPT-4 仍是 Transformer-style、next-token prediction 路线；至于更新闭源模型的内部细节，不应在没有公开资料时过度断言。</li>
 <li>Llama 系列：Meta 的开源权重大模型路线，从 Llama 1 到 Llama 3.x，再到 Llama 4 引入 MoE 和原生多模态。</li>
-<li>Qwen、DeepSeek、Mistral 等：许多通用生成模型也主要采用 Decoder-only 或以自回归生成作为核心输出机制。</li>
+<li>Qwen、DeepSeek、Mistral 等：许多开源或开放权重的通用生成模型，也主要采用 Decoder-only 或以自回归生成作为核心输出机制。</li>
+<li>GPT 系列：公开资料中，GPT-4 是 Transformer-style、next-token prediction 路线。到 GPT-5、GPT-5.5 之后，OpenAI 更强调“统一系统”“reasoning”“agentic coding”“computer use”等产品能力；因此可以把它们按生成式自回归范式理解，但不应在没有官方公开细节时断言完整内部架构。</li>
+</ol>
+<p>截至 2026-05-28，几个更新的闭源前沿模型可以这样记：</p>
+<ol>
+<li>GPT-5.5 &#x2F; GPT-5.5 Pro：OpenAI 在 2026-04-23 发布，强调 agentic coding、知识工作、科研分析、工具使用和 Codex 场景。包括我现在使用的 Codex 这类 GPT 系列产品，也可以先按“基于上下文持续生成下一步，并结合工具完成任务”的范式来理解；但具体内部结构仍以官方公开资料为准。</li>
+<li>Claude Opus 4.7：Anthropic 在 2026-04-16 发布，定位在复杂软件工程、长程多步骤任务、视觉理解和 Agent 工作流。Claude 的完整内部架构同样不是公开教材级信息，因此博客里更适合写“前沿生成式 &#x2F; hybrid reasoning 模型”，而不是武断归类成某个纯粹结构。</li>
+<li>Gemini 3.1 Pro &#x2F; Gemini 3.5 Flash：Google 在 2026 年继续推进 Gemini 3 系列，3.1 Pro 面向复杂推理和多模态任务，I&#x2F;O 2026 又推出 3.5 Flash，强调速度和 agentic workflows。Gemini 从一开始就是多模态模型族，实际系统里通常还会包含视觉、音频、工具和检索等组件。</li>
 </ol>
 <p>Llama 系列里有几个节点值得记：</p>
 <ol>
@@ -342,7 +350,7 @@
 </ol>
 <h2 id="九、最后的理解"><a href="#九、最后的理解" class="headerlink" title="九、最后的理解"></a>九、最后的理解</h2><p>这次补充让我对“模型架构”这件事少了一点二选一的执念。</p>
 <p>Encoder-only 的核心是双向理解，它把输入压缩成高质量表征。Decoder-only 的核心是自回归生成，它把已有上下文不断延展成新的内容。一个更像阅读理解，一个更像连续写作。</p>
-<p>今天通用大模型主要使用 Decoder-only，并不代表 Encoder 没价值。真正做应用时，尤其是 Agent 或 RAG 系统，经常需要两者协作：Encoder 负责把资料找准、排好、压缩好，Decoder 负责根据上下文推理、生成、调用工具和解释结果。</p>
+<p>今天通用大模型主要表现为生成式自回归范式，并不代表 Encoder 没价值。真正做应用时，尤其是 Agent 或 RAG 系统，经常需要两者协作：Encoder 负责把资料找准、排好、压缩好，生成模型负责根据上下文推理、生成、调用工具和解释结果。</p>
 <p>所以我后续再看 Agent 架构时，会更关注一个问题：系统里的每一步到底是在做“理解与检索”，还是在做“生成与行动”。这个区分，比单纯记住某个模型名字更有用。</p>
 
     </div>
@@ -357,6 +365,8 @@
               <a href="/tags/Transformer/" rel="tag"># Transformer</a>
               <a href="/tags/BERT/" rel="tag"># BERT</a>
               <a href="/tags/Llama/" rel="tag"># Llama</a>
+              <a href="/tags/GPT/" rel="tag"># GPT</a>
+              <a href="/tags/Claude/" rel="tag"># Claude</a>
           </div>
 
         
@@ -457,7 +467,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-count">12</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
