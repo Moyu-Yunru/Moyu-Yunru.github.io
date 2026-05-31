@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 8.1.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"moyu-yunru.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":"utterances","storage":true,"lazyload":true,"nav":null,"activeClass":"utterances"},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="前段时间面试时，我被问到一个问题：Skill 到底是什么？ 我当时的第一反应是：Skill 不就是一个 SKILL.md 文件吗？这个回答不能说完全错，但明显太窄了。面试官接着追问：Skill 里面不是还可以有脚本吗？ 这个追问一下子暴露了我当时理解里的盲区。我把 Skill 的入口文件当成了 Skill 的全部，却没有把它看成一个完整的能力包。后来我又读了一些关于 MCP、Tools、Skill">
+<meta property="og:type" content="article">
+<meta property="og:title" content="重新理解 Agent Skill：它不只是一个 Markdown 文件">
+<meta property="og:url" content="https://moyu-yunru.github.io/2026/05/31/agent-skill-mcp-script-workflow/index.html">
+<meta property="og:site_name" content="Libra&#39;s notes">
+<meta property="og:description" content="前段时间面试时，我被问到一个问题：Skill 到底是什么？ 我当时的第一反应是：Skill 不就是一个 SKILL.md 文件吗？这个回答不能说完全错，但明显太窄了。面试官接着追问：Skill 里面不是还可以有脚本吗？ 这个追问一下子暴露了我当时理解里的盲区。我把 Skill 的入口文件当成了 Skill 的全部，却没有把它看成一个完整的能力包。后来我又读了一些关于 MCP、Tools、Skill">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-31T02:00:16.000Z">
+<meta property="article:modified_time" content="2026-05-31T02:01:44.586Z">
+<meta property="article:author" content="Libra">
+<meta property="article:tag" content="AI Agent">
+<meta property="article:tag" content="Agent Skill">
+<meta property="article:tag" content="MCP">
+<meta property="article:tag" content="MarkItDown">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://moyu-yunru.github.io/2026/05/31/agent-skill-mcp-script-workflow/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>重新理解 Agent Skill：它不只是一个 Markdown 文件 | Libra's notes</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Libra's notes</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">A place to record my thoughts</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-文章">
+
+    <a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>文章</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+  <a href="https://github.com/Moyu-Yunru/Moyu-Yunru.github.io" class="github-corner" title="MoyuYunru GitHub" aria-label="MoyuYunru GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/31/agent-skill-mcp-script-workflow/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          重新理解 Agent Skill：它不只是一个 Markdown 文件
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2026-05-31 10:00:16 / 修改时间：10:01:44" itemprop="dateCreated datePublished" datetime="2026-05-31T10:00:16+08:00">2026-05-31</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8E%A2%E7%B4%A2AI-Agents/" itemprop="url" rel="index"><span itemprop="name">探索AI-Agents</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>前段时间面试时，我被问到一个问题：<strong>Skill 到底是什么？</strong></p>
+<p>我当时的第一反应是：Skill 不就是一个 <code>SKILL.md</code> 文件吗？这个回答不能说完全错，但明显太窄了。面试官接着追问：Skill 里面不是还可以有脚本吗？</p>
+<p>这个追问一下子暴露了我当时理解里的盲区。我把 Skill 的入口文件当成了 Skill 的全部，却没有把它看成一个完整的能力包。后来我又读了一些关于 MCP、Tools、Skills 的材料，并自己动手做了一个 MarkItDown 转 Markdown 的工作流，才慢慢把这几件事串起来。</p>
+<p>这篇文章就围绕这个问题展开：<strong>Skill 不是单纯的 Markdown 文件，而是一种让 Agent 按需加载知识、流程、脚本和资源的组织方式。</strong></p>
+<h2 id="一、为什么不能只把-Skill-理解成-Markdown-文件"><a href="#一、为什么不能只把-Skill-理解成-Markdown-文件" class="headerlink" title="一、为什么不能只把 Skill 理解成 Markdown 文件"></a>一、为什么不能只把 Skill 理解成 Markdown 文件</h2><p>如果只看最小形态，一个 Skill 确实可以只有一个 <code>SKILL.md</code>。它通常包含两部分：</p>
+<figure class="highlight markdown"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">---</span><br><span class="line">name: code-review</span><br><span class="line"><span class="section">description: Review code for bugs, security issues, and style violations.</span></span><br><span class="line"><span class="section">---</span></span><br><span class="line"></span><br><span class="line"><span class="section"># Code Review</span></span><br><span class="line"></span><br><span class="line">When reviewing code, check correctness, security, performance, and tests.</span><br></pre></td></tr></table></figure>
+
+<p>从这个角度看，Skill 很像一份给 Agent 的说明书：告诉它这个能力叫什么、什么时候使用、使用时应该遵循什么步骤。</p>
+<p>但 Skill 真正有价值的地方不只在这里。更准确地说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">SKILL.md 是 Skill 的入口文件，不是 Skill 的全部。</span><br></pre></td></tr></table></figure>
+
+<p>一个完整的 Skill 可以是一个目录，里面除了 <code>SKILL.md</code>，还可以放脚本、模板、参考文档、示例文件等内容。例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">markitdown/</span><br><span class="line">  SKILL.md</span><br><span class="line">  scripts/</span><br><span class="line">    convert_with_assets.py</span><br><span class="line">    markitdown_assets/</span><br><span class="line">      router.py</span><br><span class="line">      web_source.py</span><br><span class="line">      html_source.py</span><br><span class="line">      local_sources.py</span><br><span class="line">      naming.py</span><br><span class="line">      markdown_links.py</span><br><span class="line">      io_assets.py</span><br></pre></td></tr></table></figure>
+
+<p>这时 Skill 就不只是“给模型看的说明”，而是一个可执行的工作流包。<code>SKILL.md</code> 负责解释什么时候用、怎么用；<code>scripts/</code> 负责把稳定、重复、细节很多的操作封装成代码；其他资源文件则提供模板、规范或参考资料。</p>
+<p>所以如果面试时再被问到 Skill 是什么，我会这样回答：</p>
+<blockquote>
+<p>Skill 是一个面向 Agent 的能力包。它的核心入口通常是 <code>SKILL.md</code>，里面有名称、描述和使用说明；但它也可以包含脚本、模板和参考资料。Agent 会先根据元数据判断是否需要这个 Skill，再按需读取说明或运行脚本来完成任务。</p>
+</blockquote>
+<h2 id="二、Skill、MCP-和-Tools-分别解决什么问题"><a href="#二、Skill、MCP-和-Tools-分别解决什么问题" class="headerlink" title="二、Skill、MCP 和 Tools 分别解决什么问题"></a>二、Skill、MCP 和 Tools 分别解决什么问题</h2><p>理解 Skill 时，很容易把它和 MCP、Tools 混在一起。它们都在扩展 Agent 能力，但所在层级不同。</p>
+<p>可以先用三个问题区分：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Tools：AI 具体能调用什么函数？</span><br><span class="line">MCP：这些工具怎样被标准化暴露给 AI？</span><br><span class="line">Skills：AI 应该怎样完成一类任务？</span><br></pre></td></tr></table></figure>
+
+<p>Tools 是最小的执行单元。比如查询数据库、读取文件、调用浏览器、转换文档，本质上都可以包装成一个 Tool。Tool 通常有明确的输入输出 schema，执行结果也比较确定。</p>
+<p>MCP 是连接层。它定义了一套协议，让不同 Agent 应用可以用统一方式发现和调用外部工具。没有 MCP 时，每个 Agent 应用都要分别对接每个工具；有了 MCP，工具可以通过标准协议暴露出来，Agent 客户端按协议调用。</p>
+<p>Skill 则更偏知识层和流程层。它不一定直接提供一个外部接口，而是告诉 Agent：面对某类任务时，应该怎样判断、怎样拆解、怎样调用现有工具、什么时候运行脚本、什么时候提醒用户风险。</p>
+<p>用一个更贴近日常开发的类比：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Tools 像函数</span><br><span class="line">MCP 像函数调用协议</span><br><span class="line">Skill 像一份带脚本和模板的操作手册</span><br></pre></td></tr></table></figure>
+
+<p>这也是为什么说 MCP 和 Skills 不是替代关系。MCP 解决“连接什么、怎么连接”；Skill 解决“知道怎么做、按什么流程做”。一个 Agent 可以通过 MCP 调用 MarkItDown，也可以通过 Skill 学会什么时候该用普通转换、什么时候该用带图片本地化的增强脚本。</p>
+<h2 id="三、Skill-的关键设计：渐进式披露"><a href="#三、Skill-的关键设计：渐进式披露" class="headerlink" title="三、Skill 的关键设计：渐进式披露"></a>三、Skill 的关键设计：渐进式披露</h2><p>Skill 有一个很重要的设计思想：渐进式披露。</p>
+<p>如果把所有说明、工具定义、示例、脚本内容一股脑塞进上下文，Agent 很快就会被无关信息淹没。尤其当工具和流程变多时，上下文窗口会被大量说明占掉，模型反而更容易选错工具或漏掉关键约束。</p>
+<p>Skill 的思路是分层加载：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">第一层：元数据</span><br><span class="line">只加载 name 和 description，让 Agent 知道有哪些 Skill。</span><br><span class="line"></span><br><span class="line">第二层：核心说明</span><br><span class="line">当用户请求匹配某个 Skill 时，再读取 SKILL.md。</span><br><span class="line"></span><br><span class="line">第三层：支持资料</span><br><span class="line">只有任务真正需要时，才读取 reference、模板或运行 scripts。</span><br></pre></td></tr></table></figure>
+
+<p>这也是 <code>description</code> 很关键的原因。它不是随便写一句“helps with data”就完事，而应该说明 Skill 做什么、什么时候用、用户可能怎么表达这个需求。</p>
+<p>比如 MarkItDown 这个 Skill 的描述应该覆盖：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">转换 PDF、DOCX、PPTX、XLSX、HTML、图片、URL 到 Markdown。</span><br><span class="line">当用户要求图片下载、本地化、相对路径重写时，使用增强脚本。</span><br></pre></td></tr></table></figure>
+
+<p>这样 Agent 才能在“普通文档转换”和“带资源本地化的转换”之间做出正确选择。</p>
+<h2 id="四、为什么-Skill-里要放脚本"><a href="#四、为什么-Skill-里要放脚本" class="headerlink" title="四、为什么 Skill 里要放脚本"></a>四、为什么 Skill 里要放脚本</h2><p>面试官问“Skill 里面不是可以有脚本嘛”，其实问到了 Skill 的一个核心价值：<strong>把确定性的复杂操作交给脚本，而不是每次都让模型临场发挥。</strong></p>
+<p>模型很擅长理解意图、做判断、写说明，但它并不适合把一堆细节操作都放在上下文里一步步手搓。比如：</p>
+<ul>
+<li>解析 HTML 中的所有图片来源；</li>
+<li>处理相对路径、根路径、协议相对路径；</li>
+<li>下载远程图片；</li>
+<li>判断 Content-Type 推断扩展名；</li>
+<li>避免文件名冲突；</li>
+<li>把 Markdown 里的远程图片链接替换成本地相对路径。</li>
+</ul>
+<p>这些事情让 Agent 每次临时写代码都可以做，但不稳定，也浪费上下文。更好的方式是把它们写成脚本，放进 Skill 目录。</p>
+<p>脚本带来的好处有三个。</p>
+<p>第一，结果更确定。脚本经过测试后，同样输入更容易得到同样输出。</p>
+<p>第二，节省上下文。Agent 不需要把几百行脚本内容全部读进上下文，只需要知道“这个脚本能做什么、参数是什么、运行后看结果”。</p>
+<p>第三，便于复用和演进。以后需求变了，比如支持 <code>srcset</code>、支持 <code>data:image</code>、支持 DOCX 图片提取，只要改脚本和测试，不需要每次重新教 Agent。</p>
+<p>所以 Skill 里的脚本不是装饰品，而是把“知识说明”变成“可执行工作流”的关键。</p>
+<h2 id="五、用-MarkItDown-实践理解-Skill-的分层"><a href="#五、用-MarkItDown-实践理解-Skill-的分层" class="headerlink" title="五、用 MarkItDown 实践理解 Skill 的分层"></a>五、用 MarkItDown 实践理解 Skill 的分层</h2><p>我自己做 MarkItDown 工作流时，一开始也有误解。我以为 MarkItDown 是一个 Skill，后来才弄清楚：MarkItDown 本质上是一个 Python 包和命令行工具。</p>
+<p>它可以这样在命令行里使用：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">markitdown input.pdf -o output.md</span><br></pre></td></tr></table></figure>
+
+<p>也可以在 Python 里调用：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> markitdown <span class="keyword">import</span> MarkItDown</span><br><span class="line"></span><br><span class="line">result = MarkItDown().convert(<span class="string">&quot;input.pdf&quot;</span>)</span><br><span class="line"><span class="built_in">print</span>(result.markdown)</span><br></pre></td></tr></table></figure>
+
+<p>如果希望 Codex 或 Claude Code 这类 Agent 自动调用它，更合适的方式是把它接成 MCP server，让 Agent 看到一个类似这样的工具：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">convert_to_markdown(uri)</span><br></pre></td></tr></table></figure>
+
+<p>这时分层就出现了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">MarkItDown：真正执行转换的 Python 包</span><br><span class="line">markitdown-mcp：把转换能力暴露成 MCP Tool</span><br><span class="line">SKILL.md：告诉 Agent 什么时候调用 MCP，什么时候走增强脚本</span><br><span class="line">scripts/：补足 MarkItDown 原生能力之外的工作流</span><br></pre></td></tr></table></figure>
+
+<p>这个分层让我对 Skill 的理解清楚了很多。Skill 不是工具本身，MCP 也不是 Skill。Skill 更像是 Agent 的决策和流程说明：它可以指挥 Agent 调用 MCP，也可以指挥 Agent 运行本地脚本。</p>
+<h2 id="六、为什么普通-MarkItDown-不够用"><a href="#六、为什么普通-MarkItDown-不够用" class="headerlink" title="六、为什么普通 MarkItDown 不够用"></a>六、为什么普通 MarkItDown 不够用</h2><p>普通 MarkItDown 做文档转 Markdown 很方便，但图片处理有边界。</p>
+<p>对于 HTML 或 URL，网页里的图片通常是 <code>&lt;img src=&quot;...&quot;&gt;</code>。MarkItDown 可以把它转成 Markdown 图片链接：</p>
+<figure class="highlight markdown"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">![<span class="string">alt</span>](<span class="link">https://example.com/image.png</span>)</span><br></pre></td></tr></table></figure>
+
+<p>但它默认不会把图片下载到本地，也不会把链接改成知识库常用的相对路径。</p>
+<p>而我想要的是这种结构：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">学习笔记.md</span><br><span class="line">assets/</span><br><span class="line">  学习笔记/</span><br><span class="line">    file-20260528151812873.png</span><br></pre></td></tr></table></figure>
+
+<p>Markdown 里引用本地图片：</p>
+<figure class="highlight markdown"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">![](<span class="link">assets/学习笔记/file-20260528151812873.png</span>)</span><br></pre></td></tr></table></figure>
+
+<p>这就超出了普通 MCP 转换工具的职责。于是我在 Skill 里增加了一个资产保留脚本 <code>convert_with_assets.py</code>。</p>
+<p>它的工作流程大概是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">读取 URL 或 HTML</span><br><span class="line">-&gt; 使用 MarkItDown 转成 Markdown</span><br><span class="line">-&gt; 解析 HTML 中的 img src / data-src / srcset</span><br><span class="line">-&gt; 解析相对路径、根路径、协议相对路径</span><br><span class="line">-&gt; 下载或复制图片</span><br><span class="line">-&gt; 保存到 assets/&lt;Markdown文件名&gt;/</span><br><span class="line">-&gt; 替换 Markdown 中的图片链接</span><br><span class="line">-&gt; 写出最终 Markdown</span><br></pre></td></tr></table></figure>
+
+<p>这里 Skill 的价值就体现出来了：用户只说“把这个网页转成 Markdown，并把图片下载下来”，Agent 不应该只机械调用 <code>convert_to_markdown</code>。它应该根据 Skill 说明判断：这是资源敏感转换，需要走脚本。</p>
+<h2 id="七、脚本如何补齐不同输入场景"><a href="#七、脚本如何补齐不同输入场景" class="headerlink" title="七、脚本如何补齐不同输入场景"></a>七、脚本如何补齐不同输入场景</h2><p>我把输入类型拆成了几类。</p>
+<p>URL 最适合做图片本地化。因为网页 HTML 里本来就有图片地址，脚本可以解析图片来源，下载到本地，再把 Markdown 链接改写成相对路径。</p>
+<p>HTML 文件也类似。如果图片是本地路径，就复制到 assets；如果是远程 URL，就下载；如果是 <code>data:image/png;base64,...</code>，就解码保存。</p>
+<p>DOCX 的处理方式不一样。DOCX 本质是压缩包，图片通常在：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">word/media/image1.png</span><br><span class="line">word/media/image2.jpeg</span><br></pre></td></tr></table></figure>
+
+<p>脚本可以把这些图片解压出来，保存到 assets 目录。但因为 MarkItDown 的 DOCX 转换结果没有稳定暴露图片占位符，所以更稳妥的方式是把图片引用追加到文末，而不是假装能完美插回原位置。</p>
+<p>PDF 则更复杂。MarkItDown 的 PDF 转换主要依赖文本和表格提取，不擅长保留嵌入图片及其位置。遇到“PDF 图片也要精确保留”的需求时，应该明确说明需要专门的 PDF 图片提取流程，而不是把普通转换包装成万能能力。</p>
+<p>这几个分支也说明了一个点：Skill 不只是“工具说明”，它还可以承载策略判断。不同输入走不同路径，不确定能力要说明边界。</p>
+<h2 id="八、这件事给我的面试启发"><a href="#八、这件事给我的面试启发" class="headerlink" title="八、这件事给我的面试启发"></a>八、这件事给我的面试启发</h2><p>如果面试官问“Skill 到底是什么”，只答“一个 Markdown 文件”是不够的。更完整的回答可以分三层。</p>
+<p>第一层，<code>SKILL.md</code> 是入口。它定义 Skill 的名称、描述和核心指令，帮助 Agent 判断什么时候应该加载这项能力。</p>
+<p>第二层，Skill 是目录级能力包。它可以包含脚本、模板、参考文档和示例文件。Agent 不一定一开始就加载全部内容，而是按需读取。</p>
+<p>第三层，Skill 是工作流编排方式。它可以告诉 Agent 什么时候调用 MCP Tool，什么时候运行本地脚本，什么时候向用户说明限制。</p>
+<p>如果继续追问“那脚本和 MCP Tool 有什么区别”，可以这样回答：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">MCP Tool 更像对外暴露的标准化能力接口，适合连接数据库、API、浏览器、文件系统等外部系统。</span><br><span class="line"></span><br><span class="line">Skill 脚本更像随 Skill 分发的本地确定性流程，适合把重复、复杂、但边界明确的步骤固化下来。</span><br><span class="line"></span><br><span class="line">两者可以配合：MCP 提供基础能力，Skill 决定如何组合这些能力；脚本则承接那些不值得每次都让模型临场推理的细节。</span><br></pre></td></tr></table></figure>
+
+<p>这比“Skill 就是一个 md 文件”更能体现对 Agent 工程化的理解。</p>
+<h2 id="九、我现在对-Skill-的定义"><a href="#九、我现在对-Skill-的定义" class="headerlink" title="九、我现在对 Skill 的定义"></a>九、我现在对 Skill 的定义</h2><p>经过这次实践，我会把 Skill 定义为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Skill 是一个让 Agent 按需获得领域知识、执行流程和辅助资源的能力包。</span><br></pre></td></tr></table></figure>
+
+<p>它至少有一个 <code>SKILL.md</code>，但不止于 <code>SKILL.md</code>。它可以包含：</p>
+<ul>
+<li>指令：告诉 Agent 任务边界和执行原则；</li>
+<li>脚本：把稳定流程变成可重复执行的程序；</li>
+<li>资源：提供模板、示例、参考文档；</li>
+<li>路由策略：决定什么时候用 MCP、什么时候用脚本、什么时候说明限制。</li>
+</ul>
+<p>在 MarkItDown 这个例子里，最终分层是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">普通文档转换 -&gt; MarkItDown MCP</span><br><span class="line">图片本地化转换 -&gt; scripts/convert_with_assets.py</span><br><span class="line">使用策略和边界说明 -&gt; SKILL.md</span><br></pre></td></tr></table></figure>
+
+<p>这个结构比单纯“给 Agent 一个工具”更可靠。工具只解决能不能做，Skill 解决怎样做得稳定、什么时候不该乱做、怎样把经验沉淀下来。</p>
+<h2 id="十、总结"><a href="#十、总结" class="headerlink" title="十、总结"></a>十、总结</h2><p>这次面试问题让我意识到，很多 Agent 概念不能只看最表层的文件形态。</p>
+<p>Skill 看起来是一个 Markdown 文件，但本质上是一个能力组织方式。<code>SKILL.md</code> 是入口，脚本和资源是扩展，渐进式披露是上下文管理方式，MCP 和 Tools 则是它可以调度的外部能力。</p>
+<p>真正理解 Skill，要从“它是什么文件”走到“它怎样帮助 Agent 稳定完成一类任务”。当 Skill 里有脚本时，它就不只是提示词，而是把经验、流程和确定性代码打包成了一个可复用的 Agent 工作流。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Agent-Skill/" rel="tag"># Agent Skill</a>
+              <a href="/tags/MCP/" rel="tag"># MCP</a>
+              <a href="/tags/MarkItDown/" rel="tag"># MarkItDown</a>
+              <a href="/tags/AI-Agent/" rel="tag"># AI Agent</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2026/05/28/llm-architecture-encoder-decoder-notes/" rel="prev" title="大语言模型基础补充：Encoder-only 与 Decoder-only 到底差在哪">
+      <i class="fa fa-chevron-left"></i> 大语言模型基础补充：Encoder-only 与 Decoder-only 到底差在哪
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+    <div class="comments" id="utterances-container"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E8%83%BD%E5%8F%AA%E6%8A%8A-Skill-%E7%90%86%E8%A7%A3%E6%88%90-Markdown-%E6%96%87%E4%BB%B6"><span class="nav-number">1.</span> <span class="nav-text">一、为什么不能只把 Skill 理解成 Markdown 文件</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8C%E3%80%81Skill%E3%80%81MCP-%E5%92%8C-Tools-%E5%88%86%E5%88%AB%E8%A7%A3%E5%86%B3%E4%BB%80%E4%B9%88%E9%97%AE%E9%A2%98"><span class="nav-number">2.</span> <span class="nav-text">二、Skill、MCP 和 Tools 分别解决什么问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E3%80%81Skill-%E7%9A%84%E5%85%B3%E9%94%AE%E8%AE%BE%E8%AE%A1%EF%BC%9A%E6%B8%90%E8%BF%9B%E5%BC%8F%E6%8A%AB%E9%9C%B2"><span class="nav-number">3.</span> <span class="nav-text">三、Skill 的关键设计：渐进式披露</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E3%80%81%E4%B8%BA%E4%BB%80%E4%B9%88-Skill-%E9%87%8C%E8%A6%81%E6%94%BE%E8%84%9A%E6%9C%AC"><span class="nav-number">4.</span> <span class="nav-text">四、为什么 Skill 里要放脚本</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%94%E3%80%81%E7%94%A8-MarkItDown-%E5%AE%9E%E8%B7%B5%E7%90%86%E8%A7%A3-Skill-%E7%9A%84%E5%88%86%E5%B1%82"><span class="nav-number">5.</span> <span class="nav-text">五、用 MarkItDown 实践理解 Skill 的分层</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AD%E3%80%81%E4%B8%BA%E4%BB%80%E4%B9%88%E6%99%AE%E9%80%9A-MarkItDown-%E4%B8%8D%E5%A4%9F%E7%94%A8"><span class="nav-number">6.</span> <span class="nav-text">六、为什么普通 MarkItDown 不够用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%83%E3%80%81%E8%84%9A%E6%9C%AC%E5%A6%82%E4%BD%95%E8%A1%A5%E9%BD%90%E4%B8%8D%E5%90%8C%E8%BE%93%E5%85%A5%E5%9C%BA%E6%99%AF"><span class="nav-number">7.</span> <span class="nav-text">七、脚本如何补齐不同输入场景</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AB%E3%80%81%E8%BF%99%E4%BB%B6%E4%BA%8B%E7%BB%99%E6%88%91%E7%9A%84%E9%9D%A2%E8%AF%95%E5%90%AF%E5%8F%91"><span class="nav-number">8.</span> <span class="nav-text">八、这件事给我的面试启发</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B9%9D%E3%80%81%E6%88%91%E7%8E%B0%E5%9C%A8%E5%AF%B9-Skill-%E7%9A%84%E5%AE%9A%E4%B9%89"><span class="nav-number">9.</span> <span class="nav-text">九、我现在对 Skill 的定义</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%81%E3%80%81%E6%80%BB%E7%BB%93"><span class="nav-number">10.</span> <span class="nav-text">十、总结</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Libra"
+      src="/images/IMG_1578.jpeg">
+  <p class="site-author-name" itemprop="name">Libra</p>
+  <div class="site-description" itemprop="description">记录技术、项目与思考</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">6</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">16</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Moyu-Yunru" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Moyu-Yunru" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Libra</span>
+</div><div class="libra-footer-left">
+  <span>由 <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> 驱动</span>
+  <span>主题 <a href="https://pisces.theme-next.org/" rel="noopener" target="_blank">NexT.Pisces</a></span>
+</div>
+
+<div class="libra-footer-extra">
+  <span>共撰写了 6 篇文章</span>
+  <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<script>
+NexT.utils.loadComments(document.querySelector('#utterances-container'), () => {
+  var container = document.querySelector('#utterances-container');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  var script = document.createElement('script');
+  script.src = 'https://utteranc.es/client.js';
+  script.setAttribute('repo', "Moyu-Yunru/blog-comments");
+  script.setAttribute('issue-term', "title");
+  script.setAttribute('theme', "github-light");
+  script.crossOrigin = 'anonymous';
+  script.async = true;
+
+  container.appendChild(script);
+});
+</script>
+<script>
+(function() {
+  var phrases = [
+    '随心所欲地享受每一天(￣︶￣*))',
+    '学习 LLM，也拆解 Agent 的工作方式',
+    '把 AI 工具链放进真实工程场景',
+    '记录问题的答案，也记录学习的路径',
+    '如果喜欢，建议给个支持( •̀ ω •́ )✧',
+    '喜欢的话，留个言好嘛(oﾟvﾟ)ノ',
+    '你有建议？反馈作者(●^◡^●)',
+    '我们总是走得太急，却忘了当初为什么出发——纪伯伦',
+    '火车是朝前开的，去哪儿并不重要，关键在于窗外的风景——吕子乔',
+    '世界上只有一种真正的英雄主义，那就是认清生活的真相后依然热爱生活——罗曼·罗兰',
+  ];
+
+  function initTypewriter() {
+    var target = document.querySelector('[data-libra-typewriter]');
+    if (!target) return;
+
+    if (window.__libraTypewriterTimer) {
+      clearTimeout(window.__libraTypewriterTimer);
+    }
+
+    var phraseIndex = 0;
+    var charIndex = 0;
+    var deleting = false;
+
+    function tick() {
+      var current = phrases[phraseIndex];
+      target.textContent = current.slice(0, charIndex);
+
+      if (!deleting && charIndex < current.length) {
+        charIndex += 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 88);
+        return;
+      }
+
+      if (!deleting && charIndex === current.length) {
+        deleting = true;
+        window.__libraTypewriterTimer = setTimeout(tick, 1600);
+        return;
+      }
+
+      if (deleting && charIndex > 0) {
+        charIndex -= 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 42);
+        return;
+      }
+
+      deleting = false;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      window.__libraTypewriterTimer = setTimeout(tick, 420);
+    }
+
+    tick();
+  }
+
+  function initRuntime() {
+    var runtime = document.getElementById('libra-site-runtime');
+    if (!runtime) return;
+
+    var start = new Date(runtime.getAttribute('data-start')).getTime();
+    if (!start) return;
+
+    function renderRuntime() {
+      var diff = Math.max(0, Date.now() - start);
+      var seconds = Math.floor(diff / 1000);
+      var days = Math.floor(seconds / 86400);
+      seconds %= 86400;
+      var hours = Math.floor(seconds / 3600);
+      seconds %= 3600;
+      var minutes = Math.floor(seconds / 60);
+      seconds %= 60;
+      runtime.textContent = days + ' 天 ' + hours + ' 小时 ' + minutes + ' 分钟 ' + seconds + ' 秒';
+    }
+
+    renderRuntime();
+    if (window.__libraRuntimeTimer) {
+      clearInterval(window.__libraRuntimeTimer);
+    }
+    window.__libraRuntimeTimer = setInterval(renderRuntime, 1000);
+  }
+
+  function initLibraHome() {
+    initTypewriter();
+    initRuntime();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLibraHome);
+  } else {
+    initLibraHome();
+  }
+  document.addEventListener('pjax:success', initLibraHome);
+})();
+</script>
+
+</body>
+</html>
