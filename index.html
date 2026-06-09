@@ -28,7 +28,7 @@
 <meta property="og:description" content="AI · Agent · Backend Notes     Libra&#39;s AI &amp; Engineering Notes                             阅读文章       查看标签       了解这里                              About     你好，我是 Libra           我是一名计算机专业的学生，长">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2026-05-26T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-05-28T11:54:48.059Z">
+<meta property="article:modified_time" content="2026-06-09T09:12:30.378Z">
 <meta property="article:author" content="Libra">
 <meta name="twitter:card" content="summary">
 
@@ -165,6 +165,8 @@
 
           <div class="content libra-home-page">
             
+  
+
   <section class="libra-hero" aria-labelledby="libra-hero-title">
   <div class="libra-hero__inner">
     <p class="libra-hero__eyebrow">AI · Agent · Backend Notes</p>
@@ -196,45 +198,74 @@
   </p>
 </section>
 
-<section class="libra-section">
-  <p class="libra-section__label">Focus</p>
-  <h2>我正在关注</h2>
-  <div class="libra-focus-grid">
-    <div class="libra-focus-card">
-      <h3>AI 与智能 Agent</h3>
-      <p>记录 LLM 基础、Prompt 设计、RAG、工具调用和 Agent 落地思路。</p>
+<section class="libra-section libra-section--mainlines">
+  <div class="libra-section__head">
+    <div>
+      <p class="libra-section__label">Mainlines</p>
+      <h2>写作主线</h2>
     </div>
-    <div class="libra-focus-card">
-      <h3>分布式系统</h3>
-      <p>整理链路追踪、跨线程上下文、服务调用和日志治理等主题。</p>
-    </div>
-    <div class="libra-focus-card">
-      <h3>搜索与数据同步</h3>
-      <p>沉淀 Elasticsearch、批量写入、线程池和背压控制的实践。</p>
-    </div>
-    <div class="libra-focus-card">
-      <h3>个人知识管理</h3>
-      <p>把零散资料整理成可复读、可分享、可持续更新的文章。</p>
-    </div>
+  </div>
+  <div class="libra-mainline-grid">
+    <a class="libra-mainline-card libra-mainline-card--ai" href="/categories/AI与Agent/">
+      <span class="libra-mainline-card__mark">01</span>
+      <strong>AI 与 Agent</strong>
+      <em>LLM 基础、Prompt、RAG、工具调用、本地模型与 Agent 工作流。</em>
+      <span class="libra-mainline-card__meta">探索 AI 工程化</span>
+    </a>
+    <a class="libra-mainline-card libra-mainline-card--backend" href="/categories/后端工程/">
+      <span class="libra-mainline-card__mark">02</span>
+      <strong>后端工程</strong>
+      <em>分布式追踪、数据同步、线程池、Maven 排查与工程工具实践。</em>
+      <span class="libra-mainline-card__meta">沉淀排障路径</span>
+    </a>
+  </div>
+  <div class="libra-keyword-cloud" aria-label="关键词索引">
+    <a href="/tags/大语言模型/">大语言模型</a>
+    <a href="/tags/AI-Agent/">AI Agent</a>
+    <a href="/tags/RAG/">RAG</a>
+    <a href="/tags/Ollama/">Ollama</a>
+    <a href="/tags/分布式追踪/">分布式追踪</a>
+    <a href="/tags/Elasticsearch/">Elasticsearch</a>
+    <a href="/tags/线程池/">线程池</a>
+    <a href="/tags/Maven/">Maven</a>
+    <a href="/tags/Hexo/">Hexo</a>
   </div>
 </section>
 
-<section class="libra-section">
-  <p class="libra-section__label">Reading</p>
-  <h2>推荐阅读</h2>
-  <div class="libra-reading-list">
-    <a href="/2026/05/28/llm-basics-learning-notes/">
-      <span>01</span>
-      <strong>大语言模型基础学习笔记：从预测下一个词到构建可靠应用</strong>
-    </a>
-    <a href="/2026/05/25/es-bulk-sync-threadpool-backpressure/">
-      <span>02</span>
-      <strong>千万级数据同步到 Elasticsearch：线程池、CountDownLatch 与背压控制</strong>
-    </a>
-    <a href="/2026/05/23/distributed-route-tracing/">
-      <span>03</span>
-      <strong>分布式路由追踪：从 TraceId 到跨线程透传</strong>
-    </a>
+<section class="libra-section libra-section--latest">
+  <div class="libra-section__head">
+    <div>
+      <p class="libra-section__label">Latest</p>
+      <h2>最近更新</h2>
+    </div>
+  </div>
+  <div class="libra-latest-list">
+    
+      <a class="libra-latest-item" href="/2026/06/04/local-ai-ollama-guide/">
+        <time datetime="2026-06-04T18:49:18+08:00">2026-06-04</time>
+        <strong>Ollama 本地跑大模型：从硬件评估到 API 和知识库</strong>
+          <span>AI与Agent</span>
+      </a>
+      <a class="libra-latest-item" href="/2026/06/01/maven-parent-pom-fix-record/">
+        <time datetime="2026-06-01T15:17:57+08:00">2026-06-01</time>
+        <strong>Maven 父 POM 解析失败：一次 IDEA 与终端行为不一致的排查</strong>
+          <span>后端工程</span>
+      </a>
+      <a class="libra-latest-item" href="/2026/05/31/agent-skill-mcp-script-workflow/">
+        <time datetime="2026-05-31T10:00:16+08:00">2026-05-31</time>
+        <strong>重新理解 Agent Skill：它不只是一个 Markdown 文件</strong>
+          <span>AI与Agent</span>
+      </a>
+      <a class="libra-latest-item" href="/2026/05/28/llm-architecture-encoder-decoder-notes/">
+        <time datetime="2026-05-28T21:45:21+08:00">2026-05-28</time>
+        <strong>大语言模型基础补充：Encoder-only 与 Decoder-only 到底差在哪</strong>
+          <span>AI与Agent</span>
+      </a>
+      <a class="libra-latest-item" href="/2026/05/28/llm-basics-learning-notes/">
+        <time datetime="2026-05-28T18:17:34+08:00">2026-05-28</time>
+        <strong>大语言模型基础学习笔记：从预测下一个词到构建可靠应用</strong>
+          <span>AI与Agent</span>
+      </a>
   </div>
 </section>
 
