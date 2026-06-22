@@ -17,7 +17,7 @@
 
 <script id="hexo-configurations">
     var NexT = window.NexT || {};
-    var CONFIG = {"hostname":"moyu-yunru.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":"utterances","storage":true,"lazyload":true,"nav":null,"activeClass":"utterances"},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+    var CONFIG = {"hostname":"moyu-yunru.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":"utterances","storage":true,"lazyload":false,"nav":null,"activeClass":"utterances"},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
   </script>
 
   <meta name="description" content="记录技术、项目与思考">
@@ -161,6 +161,149 @@
 
           <div class="content index posts-expand">
             
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/06/09/codex-chrome-skill-debug-comment-lazyload/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2026/06/09/codex-chrome-skill-debug-comment-lazyload/" class="post-title-link" itemprop="url">一次博客评论延迟加载排查：Codex、Chrome 插件和 Skill 是怎么配合的</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2026-06-09 17:42:48 / 修改时间：17:43:42" itemprop="dateCreated datePublished" datetime="2026-06-09T17:42:48+08:00">2026-06-09</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>今天在浏览自己的博客时，我发现了一个很小但有点别扭的问题：打开一篇文章，翻到最底部之后，评论区不是立刻出现，而是停顿一会儿才冒出来。</p>
+<p>这个问题本身并不严重。评论功能能用，页面也没有报明显错误。但它很适合作为一个排查样本：现象发生在浏览器里，配置藏在 Hexo 和 NexT 主题里，真正的评论系统又是第三方的 utterances。以前遇到这种问题，我大概率会在浏览器开发者工具、主题配置、生成后的 HTML 之间来回切。</p>
+<p>这次我直接把线上链接丢给 Codex，让它结合当前项目排查：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://moyu-yunru.github.io/2026/06/04/local-ai-ollama-guide/</span><br></pre></td></tr></table></figure>
+
+<p>结果比我预期快很多。它不是只在代码里搜关键词，也不是只凭经验猜“应该是懒加载”，而是把 Chrome 插件、项目源码和 Skill 里的调试流程串在了一起。</p>
+<h2 id="一、问题看起来很小，但需要现场复现"><a href="#一、问题看起来很小，但需要现场复现" class="headerlink" title="一、问题看起来很小，但需要现场复现"></a>一、问题看起来很小，但需要现场复现</h2><p>我的描述其实很口语化：评论功能“不是立刻出现，而是过一会再出现”。</p>
+<p>这里面有几个可能性：</p>
+<ol>
+<li>utterances 服务本身加载慢；</li>
+<li>GitHub 相关请求慢；</li>
+<li>NexT 主题对评论做了懒加载；</li>
+<li>评论容器被动画或 CSS 延迟展示；</li>
+<li>生成后的线上页面和本地配置不一致。</li>
+</ol>
+<p>如果直接改配置，很容易变成“凭感觉修”。Codex 先做的是复现现场。它通过 Chrome 插件打开线上文章，然后观察页面初始状态：评论容器已经在 DOM 里，但里面没有 utterances 的脚本，也没有 iframe。</p>
+<p>接着它滚动到页面底部，并记录评论区的变化。这个时间线很关键：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">初始页面加载完成：#utterances-container 存在，但 childCount 为 0</span><br><span class="line">滚到底部约 250ms：插入 https://utteranc.es/client.js</span><br><span class="line">约 750ms：出现 utterances iframe</span><br><span class="line">约 2.5s：iframe 撑开高度，评论区真正可见</span><br></pre></td></tr></table></figure>
+
+<p>看到这里，问题已经不像是“评论服务随机慢”，更像是“滚动到底部后才开始加载评论脚本”。也就是说，用户看到的那段等待，不只是网络耗时，而是加载动作本身被推迟了。</p>
+<h2 id="二、Skill-让-Codex-先找根因，而不是先猜修法"><a href="#二、Skill-让-Codex-先找根因，而不是先猜修法" class="headerlink" title="二、Skill 让 Codex 先找根因，而不是先猜修法"></a>二、Skill 让 Codex 先找根因，而不是先猜修法</h2><p>这次让我感觉明显不一样的地方，是 Codex 使用了系统化调试相关的 Skill。</p>
+<p>Skill 在这里不是一个很玄的概念，它更像一份流程约束：遇到 bug 或异常行为时，先复现、收集证据、追数据流，再谈修复。这个顺序听起来朴素，但对排查很重要。</p>
+<p>如果没有这个约束，AI 很容易立刻给一个听起来合理的答案：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">把 comments.lazyload 改成 false 就好了。</span><br></pre></td></tr></table></figure>
+
+<p>这句话最后确实接近答案，但如果没有证据，它只是一个猜测。Codex 这次先用浏览器确认现象，再回到项目里查配置和主题源码，最后把线上生成文件也对了一遍。</p>
+<p>它查到了本地主题配置：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">comments:</span></span><br><span class="line">  <span class="attr">active:</span> <span class="string">utterances</span></span><br><span class="line">  <span class="attr">lazyload:</span> <span class="literal">true</span></span><br></pre></td></tr></table></figure>
+
+<p>也就是说，我当前启用的是 utterances 评论，并且评论懒加载是打开的。</p>
+<h2 id="三、Chrome-插件负责看现场，源码搜索负责追实现"><a href="#三、Chrome-插件负责看现场，源码搜索负责追实现" class="headerlink" title="三、Chrome 插件负责看现场，源码搜索负责追实现"></a>三、Chrome 插件负责看现场，源码搜索负责追实现</h2><p>Chrome 插件解决的是“线上页面实际发生了什么”。它可以打开用户给的页面，滚动到底部，读取 DOM 状态，确认脚本和 iframe 是什么时候出现的。</p>
+<p>源码搜索解决的是“为什么会这样”。在项目里，Codex 找到了 NexT 主题的评论加载逻辑：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">loadComments</span>: <span class="keyword">function</span>(<span class="params">element, callback</span>) &#123;</span><br><span class="line">  <span class="keyword">if</span> (!<span class="variable constant_">CONFIG</span>.<span class="property">comments</span>.<span class="property">lazyload</span> || !element) &#123;</span><br><span class="line">    <span class="title function_">callback</span>();</span><br><span class="line">    <span class="keyword">return</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">let</span> intersectionObserver = <span class="keyword">new</span> <span class="title class_">IntersectionObserver</span>(<span class="function">(<span class="params">entries, observer</span>) =&gt;</span> &#123;</span><br><span class="line">    <span class="keyword">let</span> entry = entries[<span class="number">0</span>];</span><br><span class="line">    <span class="keyword">if</span> (entry.<span class="property">isIntersecting</span>) &#123;</span><br><span class="line">      <span class="title function_">callback</span>();</span><br><span class="line">      observer.<span class="title function_">disconnect</span>();</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;);</span><br><span class="line">  intersectionObserver.<span class="title function_">observe</span>(element);</span><br><span class="line">  <span class="keyword">return</span> intersectionObserver;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这段逻辑的意思很直接：如果没有开启评论懒加载，就立刻执行回调；如果开启了，就观察评论容器，等它进入视口后再执行回调。</p>
+<p>而 utterances 的模板里，真正创建外部脚本的代码就在这个回调里：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="title class_">NexT</span>.<span class="property">utils</span>.<span class="title function_">loadComments</span>(<span class="variable language_">document</span>.<span class="title function_">querySelector</span>(<span class="string">&#x27;#utterances-container&#x27;</span>), <span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="keyword">var</span> script = <span class="variable language_">document</span>.<span class="title function_">createElement</span>(<span class="string">&#x27;script&#x27;</span>);</span><br><span class="line">  script.<span class="property">src</span> = <span class="string">&#x27;https://utteranc.es/client.js&#x27;</span>;</span><br><span class="line">  container.<span class="title function_">appendChild</span>(script);</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<p>这就把链路串起来了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">source/_data/next.yml</span><br><span class="line">-&gt; comments.lazyload: true</span><br><span class="line">-&gt; NexT.utils.loadComments 使用 IntersectionObserver</span><br><span class="line">-&gt; 评论容器进入视口后才执行回调</span><br><span class="line">-&gt; 回调里才插入 utterances client.js</span><br><span class="line">-&gt; utterances 再创建 iframe</span><br><span class="line">-&gt; 用户看到评论区延迟出现</span><br></pre></td></tr></table></figure>
+
+<p>这条链路比一句“因为懒加载”有价值。它说明了延迟发生在哪一层，也解释了为什么翻到底部之后还要等一会儿。</p>
+<h2 id="四、生成后的页面也要确认"><a href="#四、生成后的页面也要确认" class="headerlink" title="四、生成后的页面也要确认"></a>四、生成后的页面也要确认</h2><p>Hexo 项目还有一个特点：源码配置和线上页面之间隔着一次生成过程。</p>
+<p>所以只看 <code>source/_data/next.yml</code> 还不够。Codex 又检查了生成后的文章 HTML，确认页面里的 <code>CONFIG.comments.lazyload</code> 仍然是 <code>true</code>，底部脚本也确实调用了：</p>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title class_">NexT</span>.<span class="property">utils</span>.<span class="title function_">loadComments</span>(<span class="variable language_">document</span>.<span class="title function_">querySelector</span>(<span class="string">&#x27;#utterances-container&#x27;</span>), ...)</span><br></pre></td></tr></table></figure>
+
+<p>这一步让我觉得很实用。很多静态博客问题并不只出在“源码怎么写”，还可能出在“生成结果是不是符合预期”。尤其当主题配置、数据文件、模板注入混在一起时，直接看产物能少绕很多路。</p>
+<p>最终结论也就很明确了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">评论区延迟出现不是文章内容问题，也不是 utterances 配置错误。</span><br><span class="line">根因是 NexT 的 comments.lazyload 开关为 true。</span><br><span class="line">它让评论脚本等到评论容器进入视口后才开始加载。</span><br></pre></td></tr></table></figure>
+
+<h2 id="五、这次体验让我重新理解插件和-Skill-的价值"><a href="#五、这次体验让我重新理解插件和-Skill-的价值" class="headerlink" title="五、这次体验让我重新理解插件和 Skill 的价值"></a>五、这次体验让我重新理解插件和 Skill 的价值</h2><p>我以前对 AI 编程工具的期待，更多是“帮我写代码”或“帮我解释代码”。但这次排查让我感觉，Codex 更像是在补齐一个工程师排查问题时的上下文切换成本。</p>
+<p>这类问题本来要做几件事：</p>
+<ol>
+<li>打开线上页面；</li>
+<li>滚到底部复现；</li>
+<li>看评论 DOM 有没有出现；</li>
+<li>看脚本什么时候插入；</li>
+<li>回项目里搜评论配置；</li>
+<li>读主题工具函数；</li>
+<li>对照生成后的 HTML；</li>
+<li>给出结论和可能的修改方式。</li>
+</ol>
+<p>每一步都不难，但它们分散在浏览器、终端、源码、构建产物之间。真正耗人的不是某一行代码，而是来回切换和保持上下文。</p>
+<p>Chrome 插件让 Codex 能看到真实页面，而不是只根据仓库猜。Skill 让 Codex 按调试流程推进，而不是上来就给修复建议。项目上下文让它知道这是一个 Hexo 博客，评论配置应该从 <code>source/_data/next.yml</code> 和 NexT 主题里找。</p>
+<p>这些能力拼在一起，才有了这次很快的排查体验。</p>
+<h2 id="六、最后要不要改"><a href="#六、最后要不要改" class="headerlink" title="六、最后要不要改"></a>六、最后要不要改</h2><p>如果我希望评论区在页面打开后就更早准备好，可以把配置改成：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">comments:</span></span><br><span class="line">  <span class="attr">lazyload:</span> <span class="literal">false</span></span><br></pre></td></tr></table></figure>
+
+<p>这样 utterances 脚本会更早加载，滚到底部时评论区更可能已经就绪。代价也很清楚：每篇文章打开时都会提前请求评论脚本和相关资源，初始页面加载会多一点负担。</p>
+<p>所以这不是绝对的 bug，更像一个体验取舍：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">lazyload: true</span><br><span class="line">首屏更轻，但评论区滚到时才加载，会有等待感。</span><br><span class="line"></span><br><span class="line">lazyload: false</span><br><span class="line">评论更早准备好，但页面初始请求更多。</span><br></pre></td></tr></table></figure>
+
+<p>这次我暂时没有立刻改配置，因为问题的本质已经清楚了。等我更在意评论区即时出现时，再关掉懒加载也不迟。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>这次小问题让我对 Codex 的使用方式有了一个更具体的认识：它不只是一个代码生成器，更像一个能调用浏览器、理解项目结构、遵循调试流程的协作对象。</p>
+<p>Chrome 插件解决“看见现场”，Skill 解决“按流程思考”，项目源码解决“找到根因”。当这三件事连起来时，一个原本需要我在多个工具之间切换的问题，就变成了一次很顺滑的对话式排查。</p>
+<p>这可能才是 Agent 工具最有意思的地方：它不是替我拥有判断，而是把那些繁琐但必要的排查步骤组织起来，让我更快地看到问题真正在哪里。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
       
   
   
@@ -1884,7 +2027,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">8</span>
+          <span class="site-state-item-count">9</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
@@ -1897,7 +2040,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">21</span>
+        <span class="site-state-item-count">23</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
@@ -1940,7 +2083,7 @@
 </div>
 
 <div class="libra-footer-extra">
-  <span>共撰写了 8 篇文章</span>
+  <span>共撰写了 9 篇文章</span>
   <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
 </div>
 
