@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 8.1.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"moyu-yunru.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":"utterances","storage":true,"lazyload":false,"nav":null,"activeClass":"utterances"},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="用 AI 辅助写后端代码时，我遇到过一个很典型的问题：如果提示词只写“帮我实现这个接口”或者“帮我写一段 SQL 查出这些数据”，AI 通常能把功能写出来，但它不一定会关心这段 SQL 执行多少次、会不会慢、数据量变大后还能不能扛住。 这次智慧调度需求里，getMonitoring 和 initiateDispatch 两个接口就暴露了这个问题。功能上看，接口能返回泵站监测数据、摄像头编码、预警状">
+<meta property="og:type" content="article">
+<meta property="og:title" content="AI 写 SQL 不能只问“怎么查”：一次 N+1 查询优化复盘">
+<meta property="og:url" content="https://moyu-yunru.github.io/2026/06/18/ai-assisted-sql-n-plus-one-optimization/index.html">
+<meta property="og:site_name" content="Libra&#39;s notes">
+<meta property="og:description" content="用 AI 辅助写后端代码时，我遇到过一个很典型的问题：如果提示词只写“帮我实现这个接口”或者“帮我写一段 SQL 查出这些数据”，AI 通常能把功能写出来，但它不一定会关心这段 SQL 执行多少次、会不会慢、数据量变大后还能不能扛住。 这次智慧调度需求里，getMonitoring 和 initiateDispatch 两个接口就暴露了这个问题。功能上看，接口能返回泵站监测数据、摄像头编码、预警状">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-06-18T14:15:00.000Z">
+<meta property="article:modified_time" content="2026-07-01T16:06:05.303Z">
+<meta property="article:author" content="Libra">
+<meta property="article:tag" content="AI辅助编程">
+<meta property="article:tag" content="SQL优化">
+<meta property="article:tag" content="后端性能">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://moyu-yunru.github.io/2026/06/18/ai-assisted-sql-n-plus-one-optimization/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>AI 写 SQL 不能只问“怎么查”：一次 N+1 查询优化复盘 | Libra's notes</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Libra's notes</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">A place to record my thoughts</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-文章">
+
+    <a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>文章</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+  <a href="https://github.com/Moyu-Yunru/Moyu-Yunru.github.io" class="github-corner" title="MoyuYunru GitHub" aria-label="MoyuYunru GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/06/18/ai-assisted-sql-n-plus-one-optimization/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          AI 写 SQL 不能只问“怎么查”：一次 N+1 查询优化复盘
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2026-06-18 22:15:00" itemprop="dateCreated datePublished" datetime="2026-06-18T22:15:00+08:00">2026-06-18</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-07-02 00:06:05" itemprop="dateModified" datetime="2026-07-02T00:06:05+08:00">2026-07-02</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E5%90%8E%E7%AB%AF%E5%B7%A5%E7%A8%8B/" itemprop="url" rel="index"><span itemprop="name">后端工程</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>用 AI 辅助写后端代码时，我遇到过一个很典型的问题：如果提示词只写“帮我实现这个接口”或者“帮我写一段 SQL 查出这些数据”，AI 通常能把功能写出来，但它不一定会关心这段 SQL 执行多少次、会不会慢、数据量变大后还能不能扛住。</p>
+<p>这次智慧调度需求里，<code>getMonitoring</code> 和 <code>initiateDispatch</code> 两个接口就暴露了这个问题。功能上看，接口能返回泵站监测数据、摄像头编码、预警状态、上游泵站和建议操作；但性能上看，里面隐藏了大量循环查库。局域网环境下可能没感觉，一旦数据库连接切到 VPN 环境，单次查询延迟被放大，接口响应就从“还能接受”变成了接近不可用。</p>
+<p>这篇文章不展开所有业务细节，只复盘一个核心教训：让 AI 写 SQL 时，不能只要求功能正确，还要把性能约束写进提示词和验收标准。</p>
+<h2 id="一、功能正确不等于工程正确"><a href="#一、功能正确不等于工程正确" class="headerlink" title="一、功能正确不等于工程正确"></a>一、功能正确不等于工程正确</h2><p><code>getMonitoring</code> 是一个运行监测接口。前端传入区域类型，比如泵站 <code>bz</code>，后端要返回该区域下所有泵站的实时数据：</p>
+<ul>
+<li>泵站名称、坐标、在线状态；</li>
+<li>当前液位、瞬时流量等公共指标；</li>
+<li>每台泵机的运行状态、运行模式、电流、电压等指标；</li>
+<li>是否预警、预警类型；</li>
+<li>摄像头编码和最新数据时间。</li>
+</ul>
+<p><code>initiateDispatch</code> 是发起调度初始化接口。前端传入一个预警泵站终端编号，后端要返回当前泵站、上游泵站以及每台泵机的建议操作。</p>
+<p>从功能角度看，这些逻辑都能拆成一个个小查询：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">查设备传感器配置</span><br><span class="line">查每个传感器最新值</span><br><span class="line">查每个泵站摄像头编码</span><br><span class="line">查预警规则</span><br><span class="line">查当前泵站上游泵站</span><br><span class="line">组装结果</span><br></pre></td></tr></table></figure>
+
+<p>如果只是让 AI “把数据查出来”，它很容易写出一种直觉式实现：先查一批基础数据，然后在循环里继续查每个传感器、每个终端、每条规则对应的数据。</p>
+<p>这种写法最大的问题是，它看起来非常顺。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (每个传感器) &#123;</span><br><span class="line">    查询 data_latest 最新值;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (每个终端) &#123;</span><br><span class="line">    查询摄像头编码;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>当数据量小、数据库就在局域网里、单次查询只要 1ms 时，这种代码甚至不会马上暴露问题。但它的风险一直存在，只是被低延迟掩盖了。</p>
+<h2 id="二、N-1-是怎么被放大的"><a href="#二、N-1-是怎么被放大的" class="headerlink" title="二、N+1 是怎么被放大的"></a>二、N+1 是怎么被放大的</h2><p>这次接口涉及多个数据源：设备和传感器配置在一个库，实时数据在另一个库，摄像头和调度配置又在 SQL Server 里。</p>
+<p>优化前的大致调用方式可以抽象成这样：</p>
+<ol>
+<li>先查一次设备和传感器配置。</li>
+<li>遍历每个传感器，逐条查询 <code>data_latest</code>，用来计算最新数据时间。</li>
+<li>遍历每个终端，逐条查询摄像头编码。</li>
+<li>组装返回值时，再遍历每个传感器，逐条查询 <code>data_latest</code> 取实时值。</li>
+<li>计算预警时，再按设备查询当前液位。</li>
+</ol>
+<p>如果有 100 个传感器、20 个终端、10 个设备绑定了预警规则，数据库调用次数大概会变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">1 次基础配置查询</span><br><span class="line">+ 100 次最新时间查询</span><br><span class="line">+ 20 次摄像头查询</span><br><span class="line">+ 100 次实时值查询</span><br><span class="line">+ 3 次预警规则配置查询</span><br><span class="line">+ 10 次预警液位查询</span><br><span class="line">= 234 次左右</span><br></pre></td></tr></table></figure>
+
+<p>这就是典型的 N+1 问题。更准确地说，它不只是一个 N+1，而是多个 N+1 叠在一起。</p>
+<p>真正让问题爆炸的是环境变化。原来局域网里单次 SQL 很快，后来切到 VPN 链路，单次查询延迟可能到几百毫秒。假设一次数据库往返 300ms，200 多次调用理论上就会被拉到一分钟级别。</p>
+<p>这时再看原来的实现，就会发现问题不是“某条 SQL 写得特别慢”，而是“数据库往返次数太多”。</p>
+<h2 id="三、优化核心：批量查一次，内存里复用"><a href="#三、优化核心：批量查一次，内存里复用" class="headerlink" title="三、优化核心：批量查一次，内存里复用"></a>三、优化核心：批量查一次，内存里复用</h2><p>这次优化的核心思路很朴素：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">把循环里的 Mapper 调用，改成循环前一次批量查询。</span><br></pre></td></tr></table></figure>
+
+<p>先把所有需要的终端编号和传感器编码收集出来：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Set&lt;String&gt; terminalCodes = <span class="keyword">new</span> <span class="title class_">HashSet</span>&lt;&gt;();</span><br><span class="line">Set&lt;String&gt; sensorCodes = <span class="keyword">new</span> <span class="title class_">HashSet</span>&lt;&gt;();</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (Map&lt;String, String&gt; item : dataList) &#123;</span><br><span class="line">    terminalCodes.add(item.get(<span class="string">&quot;devicecode&quot;</span>));</span><br><span class="line">    sensorCodes.add(item.get(<span class="string">&quot;productflag&quot;</span>));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后一次性查出所有实时数据：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span></span><br><span class="line">  terminal_code,</span><br><span class="line">  sensor_code,</span><br><span class="line">  <span class="keyword">value</span>,</span><br><span class="line">  <span class="type">time</span></span><br><span class="line"><span class="keyword">FROM</span> data_latest</span><br><span class="line"><span class="keyword">WHERE</span> terminal_code <span class="keyword">IN</span> (...)</span><br><span class="line">  <span class="keyword">AND</span> sensor_code <span class="keyword">IN</span> (...);</span><br></pre></td></tr></table></figure>
+
+<p>查出来以后，放进一个 Map：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Map&lt;String, Map&lt;String, String&gt;&gt; latestDataCache = <span class="keyword">new</span> <span class="title class_">HashMap</span>&lt;&gt;();</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (Map&lt;String, String&gt; row : batchLatest) &#123;</span><br><span class="line">    <span class="type">String</span> <span class="variable">key</span> <span class="operator">=</span> row.get(<span class="string">&quot;terminal_code&quot;</span>) + <span class="string">&quot;::&quot;</span> + row.get(<span class="string">&quot;sensor_code&quot;</span>);</span><br><span class="line">    latestDataCache.put(key, row);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>后面不管是计算最新数据时间、组装实时值，还是计算预警，都从这个 Map 里取：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">String</span> <span class="variable">key</span> <span class="operator">=</span> terminalCode + <span class="string">&quot;::&quot;</span> + sensorCode;</span><br><span class="line">Map&lt;String, String&gt; latest = latestDataCache.get(key);</span><br></pre></td></tr></table></figure>
+
+<p>摄像头编码也是同样的思路。原来是每个终端查一次：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> camera_code_</span><br><span class="line"><span class="keyword">FROM</span> t_ddbzspxx</span><br><span class="line"><span class="keyword">WHERE</span> camera_iot_code_ <span class="operator">=</span> ?;</span><br></pre></td></tr></table></figure>
+
+<p>优化后改成一次批量查：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span></span><br><span class="line">  camera_iot_code_ <span class="keyword">AS</span> terminalCode,</span><br><span class="line">  camera_code_ <span class="keyword">AS</span> cameraIndexCode</span><br><span class="line"><span class="keyword">FROM</span> t_ddbzspxx</span><br><span class="line"><span class="keyword">WHERE</span> camera_iot_code_ <span class="keyword">IN</span> (...);</span><br></pre></td></tr></table></figure>
+
+<p>再构造成 <code>terminalCode -&gt; cameraIndexCode</code> 的 Map，组装结果时直接取。</p>
+<p>这个优化没有引入复杂技术，也没有改变业务语义，但效果非常明显：数据库调用从上百次降到个位数，接口耗时自然就下来了。</p>
+<h2 id="四、接口之间也要避免重复调用"><a href="#四、接口之间也要避免重复调用" class="headerlink" title="四、接口之间也要避免重复调用"></a>四、接口之间也要避免重复调用</h2><p><code>initiateDispatch</code> 还有另一个性能点：它内部需要当前泵站数据，也需要上游泵站数据。</p>
+<p>一个最直接的写法是调用两次 <code>getMonitoring</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">第一次：只查当前泵站</span><br><span class="line">第二次：查所有上游泵站</span><br></pre></td></tr></table></figure>
+
+<p>这在代码结构上很好理解，但性能上等于把 <code>getMonitoring</code> 的整套流程跑了两遍。坐标转换、批量查询、预警计算都会重复发生。</p>
+<p>更好的方式是先查出上游泵站编号，然后把当前泵站和上游泵站合成一个列表：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">List&lt;String&gt; allCodes = <span class="keyword">new</span> <span class="title class_">ArrayList</span>&lt;&gt;();</span><br><span class="line">allCodes.add(currentTerminalCode);</span><br><span class="line">allCodes.addAll(upstreamCodes);</span><br></pre></td></tr></table></figure>
+
+<p>再一次性调用：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">screenIotService.getMonitoring(<span class="string">&quot;bz&quot;</span>, <span class="literal">null</span>, <span class="literal">null</span>, allCodes);</span><br></pre></td></tr></table></figure>
+
+<p>拿到结果后，在内存里把当前泵站和上游泵站分开。这样既复用了 <code>getMonitoring</code> 的批量能力，也避免了接口级别的重复开销。</p>
+<h2 id="五、让-AI-写-SQL-时，提示词要补上性能约束"><a href="#五、让-AI-写-SQL-时，提示词要补上性能约束" class="headerlink" title="五、让 AI 写 SQL 时，提示词要补上性能约束"></a>五、让 AI 写 SQL 时，提示词要补上性能约束</h2><p>这次问题让我意识到，很多 AI 生成的 SQL 不是“不对”，而是“只对当前最小场景负责”。如果提示词太简单，AI 会优先满足返回字段和业务条件，不一定主动追问数据量、延迟、索引和调用次数。</p>
+<p>所以现在我会把 SQL 需求写得更具体：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">请实现这个查询逻辑，但不要只保证功能正确，还要考虑性能。</span><br><span class="line"></span><br><span class="line">请在给出 SQL 和代码前先说明：</span><br><span class="line">1. 这个接口预计会产生几次数据库调用。</span><br><span class="line">2. 是否存在循环里调用 Mapper/DAO 的 N+1 查询。</span><br><span class="line">3. 哪些数据可以先批量查出，再用 Map 在内存中复用。</span><br><span class="line">4. IN 查询的数据量可能有多大，是否需要分批。</span><br><span class="line">5. 关键 WHERE 条件是否有索引，无法确认时请标注未验证。</span><br><span class="line">6. 如果接口依赖另一个接口，是否会重复执行相同查询。</span><br><span class="line"></span><br><span class="line">代码实现时，请优先使用批量查询、JOIN 或一次查询后内存分组，避免在 for 循环中访问数据库。</span><br></pre></td></tr></table></figure>
+
+<p>这个提示词会把 AI 的注意力从“怎么查到数据”拉到“用什么代价查到数据”。</p>
+<h2 id="六、代码审查时重点搜什么"><a href="#六、代码审查时重点搜什么" class="headerlink" title="六、代码审查时重点搜什么"></a>六、代码审查时重点搜什么</h2><p>如果已经让 AI 写完了代码，我会重点检查几类信号。</p>
+<p>第一，搜索循环里的 Mapper 调用：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">for (...) &#123;</span><br><span class="line">    xxxMapper.xxx(...)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>不是说循环里调用 Mapper 一定错，但它一定值得追问：这是不是可以批量查？如果循环次数从 10 变成 1000，会发生什么？</p>
+<p>第二，检查同一张表是否被重复查。比如这次 <code>data_latest</code> 同时被用来取最新时间、实时值和预警计算。如果每个步骤都各查一遍，就是典型浪费。</p>
+<p>第三，检查接口之间是否重复跑完整流程。一个接口调用另一个重接口多次，很容易让数据库调用成倍增长。</p>
+<p>第四，把环境延迟算进去。性能评估不能只看本地开发库。只要数据库在远端、跨网络或走 VPN，数据库往返次数就会变成核心指标。</p>
+<h2 id="七、总结"><a href="#七、总结" class="headerlink" title="七、总结"></a>七、总结</h2><p>AI 能很快写出一段“能跑”的 SQL，但后端接口不是只要能跑就行。数据量、调用次数、网络延迟、索引和复用方式，都会决定这个接口上线后是稳定还是拖垮页面。</p>
+<p>这次优化给我的经验可以概括成一句话：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">让 AI 写 SQL 时，不要只问“怎么查”，还要问“查几次、扫多少、能不能复用、慢在哪里”。</span><br></pre></td></tr></table></figure>
+
+<p>功能正确是第一步，性能正确才是能交付的后端代码。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/AI%E8%BE%85%E5%8A%A9%E7%BC%96%E7%A8%8B/" rel="tag"># AI辅助编程</a>
+              <a href="/tags/SQL%E4%BC%98%E5%8C%96/" rel="tag"># SQL优化</a>
+              <a href="/tags/%E5%90%8E%E7%AB%AF%E6%80%A7%E8%83%BD/" rel="tag"># 后端性能</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2026/06/17/ai-assisted-dev-schema-verification/" rel="prev" title="AI 写研发计划时，先别急着相信数据库字段">
+      <i class="fa fa-chevron-left"></i> AI 写研发计划时，先别急着相信数据库字段
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+    <div class="comments" id="utterances-container"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E5%8A%9F%E8%83%BD%E6%AD%A3%E7%A1%AE%E4%B8%8D%E7%AD%89%E4%BA%8E%E5%B7%A5%E7%A8%8B%E6%AD%A3%E7%A1%AE"><span class="nav-number">1.</span> <span class="nav-text">一、功能正确不等于工程正确</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8C%E3%80%81N-1-%E6%98%AF%E6%80%8E%E4%B9%88%E8%A2%AB%E6%94%BE%E5%A4%A7%E7%9A%84"><span class="nav-number">2.</span> <span class="nav-text">二、N+1 是怎么被放大的</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E3%80%81%E4%BC%98%E5%8C%96%E6%A0%B8%E5%BF%83%EF%BC%9A%E6%89%B9%E9%87%8F%E6%9F%A5%E4%B8%80%E6%AC%A1%EF%BC%8C%E5%86%85%E5%AD%98%E9%87%8C%E5%A4%8D%E7%94%A8"><span class="nav-number">3.</span> <span class="nav-text">三、优化核心：批量查一次，内存里复用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E3%80%81%E6%8E%A5%E5%8F%A3%E4%B9%8B%E9%97%B4%E4%B9%9F%E8%A6%81%E9%81%BF%E5%85%8D%E9%87%8D%E5%A4%8D%E8%B0%83%E7%94%A8"><span class="nav-number">4.</span> <span class="nav-text">四、接口之间也要避免重复调用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%94%E3%80%81%E8%AE%A9-AI-%E5%86%99-SQL-%E6%97%B6%EF%BC%8C%E6%8F%90%E7%A4%BA%E8%AF%8D%E8%A6%81%E8%A1%A5%E4%B8%8A%E6%80%A7%E8%83%BD%E7%BA%A6%E6%9D%9F"><span class="nav-number">5.</span> <span class="nav-text">五、让 AI 写 SQL 时，提示词要补上性能约束</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AD%E3%80%81%E4%BB%A3%E7%A0%81%E5%AE%A1%E6%9F%A5%E6%97%B6%E9%87%8D%E7%82%B9%E6%90%9C%E4%BB%80%E4%B9%88"><span class="nav-number">6.</span> <span class="nav-text">六、代码审查时重点搜什么</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%83%E3%80%81%E6%80%BB%E7%BB%93"><span class="nav-number">7.</span> <span class="nav-text">七、总结</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Libra"
+      src="/images/IMG_1578.jpeg">
+  <p class="site-author-name" itemprop="name">Libra</p>
+  <div class="site-description" itemprop="description">记录技术、项目与思考</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">11</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">28</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Moyu-Yunru" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Moyu-Yunru" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Libra</span>
+</div><div class="libra-footer-left">
+  <span>由 <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> 驱动</span>
+  <span>主题 <a href="https://pisces.theme-next.org/" rel="noopener" target="_blank">NexT.Pisces</a></span>
+</div>
+
+<div class="libra-footer-extra">
+  <span>共撰写了 11 篇文章</span>
+  <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<script>
+NexT.utils.loadComments(document.querySelector('#utterances-container'), () => {
+  var container = document.querySelector('#utterances-container');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  var script = document.createElement('script');
+  script.src = 'https://utteranc.es/client.js';
+  script.setAttribute('repo', "Moyu-Yunru/blog-comments");
+  script.setAttribute('issue-term', "title");
+  script.setAttribute('theme', "github-light");
+  script.crossOrigin = 'anonymous';
+  script.async = true;
+
+  container.appendChild(script);
+});
+</script>
+<script>
+(function() {
+  var phrases = [
+    '随心所欲地享受每一天(￣︶￣*))',
+    '学习 LLM，也拆解 Agent 的工作方式',
+    '把 AI 工具链放进真实工程场景',
+    '记录问题的答案，也记录学习的路径',
+    '如果喜欢，建议给个支持( •̀ ω •́ )✧',
+    '喜欢的话，留个言好嘛(oﾟvﾟ)ノ',
+    '你有建议？反馈作者(●^◡^●)',
+    '我们总是走得太急，却忘了当初为什么出发——纪伯伦',
+    '火车是朝前开的，去哪儿并不重要，关键在于窗外的风景——吕子乔',
+    '世界上只有一种真正的英雄主义，那就是认清生活的真相后依然热爱生活——罗曼·罗兰',
+  ];
+
+  function initTypewriter() {
+    var target = document.querySelector('[data-libra-typewriter]');
+    if (!target) return;
+
+    if (window.__libraTypewriterTimer) {
+      clearTimeout(window.__libraTypewriterTimer);
+    }
+
+    var phraseIndex = 0;
+    var charIndex = 0;
+    var deleting = false;
+
+    function tick() {
+      var current = phrases[phraseIndex];
+      target.textContent = current.slice(0, charIndex);
+
+      if (!deleting && charIndex < current.length) {
+        charIndex += 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 88);
+        return;
+      }
+
+      if (!deleting && charIndex === current.length) {
+        deleting = true;
+        window.__libraTypewriterTimer = setTimeout(tick, 1600);
+        return;
+      }
+
+      if (deleting && charIndex > 0) {
+        charIndex -= 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 42);
+        return;
+      }
+
+      deleting = false;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      window.__libraTypewriterTimer = setTimeout(tick, 420);
+    }
+
+    tick();
+  }
+
+  function initRuntime() {
+    var runtime = document.getElementById('libra-site-runtime');
+    if (!runtime) return;
+
+    var start = new Date(runtime.getAttribute('data-start')).getTime();
+    if (!start) return;
+
+    function renderRuntime() {
+      var diff = Math.max(0, Date.now() - start);
+      var seconds = Math.floor(diff / 1000);
+      var days = Math.floor(seconds / 86400);
+      seconds %= 86400;
+      var hours = Math.floor(seconds / 3600);
+      seconds %= 3600;
+      var minutes = Math.floor(seconds / 60);
+      seconds %= 60;
+      runtime.textContent = days + ' 天 ' + hours + ' 小时 ' + minutes + ' 分钟 ' + seconds + ' 秒';
+    }
+
+    renderRuntime();
+    if (window.__libraRuntimeTimer) {
+      clearInterval(window.__libraRuntimeTimer);
+    }
+    window.__libraRuntimeTimer = setInterval(renderRuntime, 1000);
+  }
+
+  function initLibraHome() {
+    initTypewriter();
+    initRuntime();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLibraHome);
+  } else {
+    initLibraHome();
+  }
+  document.addEventListener('pjax:success', initLibraHome);
+})();
+</script>
+
+</body>
+</html>

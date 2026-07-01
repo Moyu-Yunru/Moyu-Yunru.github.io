@@ -165,6 +165,331 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/06/18/ai-assisted-sql-n-plus-one-optimization/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2026/06/18/ai-assisted-sql-n-plus-one-optimization/" class="post-title-link" itemprop="url">AI 写 SQL 不能只问“怎么查”：一次 N+1 查询优化复盘</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2026-06-18 22:15:00" itemprop="dateCreated datePublished" datetime="2026-06-18T22:15:00+08:00">2026-06-18</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-07-02 00:06:05" itemprop="dateModified" datetime="2026-07-02T00:06:05+08:00">2026-07-02</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E5%90%8E%E7%AB%AF%E5%B7%A5%E7%A8%8B/" itemprop="url" rel="index"><span itemprop="name">后端工程</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>用 AI 辅助写后端代码时，我遇到过一个很典型的问题：如果提示词只写“帮我实现这个接口”或者“帮我写一段 SQL 查出这些数据”，AI 通常能把功能写出来，但它不一定会关心这段 SQL 执行多少次、会不会慢、数据量变大后还能不能扛住。</p>
+<p>这次智慧调度需求里，<code>getMonitoring</code> 和 <code>initiateDispatch</code> 两个接口就暴露了这个问题。功能上看，接口能返回泵站监测数据、摄像头编码、预警状态、上游泵站和建议操作；但性能上看，里面隐藏了大量循环查库。局域网环境下可能没感觉，一旦数据库连接切到 VPN 环境，单次查询延迟被放大，接口响应就从“还能接受”变成了接近不可用。</p>
+<p>这篇文章不展开所有业务细节，只复盘一个核心教训：让 AI 写 SQL 时，不能只要求功能正确，还要把性能约束写进提示词和验收标准。</p>
+<h2 id="一、功能正确不等于工程正确"><a href="#一、功能正确不等于工程正确" class="headerlink" title="一、功能正确不等于工程正确"></a>一、功能正确不等于工程正确</h2><p><code>getMonitoring</code> 是一个运行监测接口。前端传入区域类型，比如泵站 <code>bz</code>，后端要返回该区域下所有泵站的实时数据：</p>
+<ul>
+<li>泵站名称、坐标、在线状态；</li>
+<li>当前液位、瞬时流量等公共指标；</li>
+<li>每台泵机的运行状态、运行模式、电流、电压等指标；</li>
+<li>是否预警、预警类型；</li>
+<li>摄像头编码和最新数据时间。</li>
+</ul>
+<p><code>initiateDispatch</code> 是发起调度初始化接口。前端传入一个预警泵站终端编号，后端要返回当前泵站、上游泵站以及每台泵机的建议操作。</p>
+<p>从功能角度看，这些逻辑都能拆成一个个小查询：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">查设备传感器配置</span><br><span class="line">查每个传感器最新值</span><br><span class="line">查每个泵站摄像头编码</span><br><span class="line">查预警规则</span><br><span class="line">查当前泵站上游泵站</span><br><span class="line">组装结果</span><br></pre></td></tr></table></figure>
+
+<p>如果只是让 AI “把数据查出来”，它很容易写出一种直觉式实现：先查一批基础数据，然后在循环里继续查每个传感器、每个终端、每条规则对应的数据。</p>
+<p>这种写法最大的问题是，它看起来非常顺。</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> (每个传感器) &#123;</span><br><span class="line">    查询 data_latest 最新值;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (每个终端) &#123;</span><br><span class="line">    查询摄像头编码;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>当数据量小、数据库就在局域网里、单次查询只要 1ms 时，这种代码甚至不会马上暴露问题。但它的风险一直存在，只是被低延迟掩盖了。</p>
+<h2 id="二、N-1-是怎么被放大的"><a href="#二、N-1-是怎么被放大的" class="headerlink" title="二、N+1 是怎么被放大的"></a>二、N+1 是怎么被放大的</h2><p>这次接口涉及多个数据源：设备和传感器配置在一个库，实时数据在另一个库，摄像头和调度配置又在 SQL Server 里。</p>
+<p>优化前的大致调用方式可以抽象成这样：</p>
+<ol>
+<li>先查一次设备和传感器配置。</li>
+<li>遍历每个传感器，逐条查询 <code>data_latest</code>，用来计算最新数据时间。</li>
+<li>遍历每个终端，逐条查询摄像头编码。</li>
+<li>组装返回值时，再遍历每个传感器，逐条查询 <code>data_latest</code> 取实时值。</li>
+<li>计算预警时，再按设备查询当前液位。</li>
+</ol>
+<p>如果有 100 个传感器、20 个终端、10 个设备绑定了预警规则，数据库调用次数大概会变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">1 次基础配置查询</span><br><span class="line">+ 100 次最新时间查询</span><br><span class="line">+ 20 次摄像头查询</span><br><span class="line">+ 100 次实时值查询</span><br><span class="line">+ 3 次预警规则配置查询</span><br><span class="line">+ 10 次预警液位查询</span><br><span class="line">= 234 次左右</span><br></pre></td></tr></table></figure>
+
+<p>这就是典型的 N+1 问题。更准确地说，它不只是一个 N+1，而是多个 N+1 叠在一起。</p>
+<p>真正让问题爆炸的是环境变化。原来局域网里单次 SQL 很快，后来切到 VPN 链路，单次查询延迟可能到几百毫秒。假设一次数据库往返 300ms，200 多次调用理论上就会被拉到一分钟级别。</p>
+<p>这时再看原来的实现，就会发现问题不是“某条 SQL 写得特别慢”，而是“数据库往返次数太多”。</p>
+<h2 id="三、优化核心：批量查一次，内存里复用"><a href="#三、优化核心：批量查一次，内存里复用" class="headerlink" title="三、优化核心：批量查一次，内存里复用"></a>三、优化核心：批量查一次，内存里复用</h2><p>这次优化的核心思路很朴素：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">把循环里的 Mapper 调用，改成循环前一次批量查询。</span><br></pre></td></tr></table></figure>
+
+<p>先把所有需要的终端编号和传感器编码收集出来：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Set&lt;String&gt; terminalCodes = <span class="keyword">new</span> <span class="title class_">HashSet</span>&lt;&gt;();</span><br><span class="line">Set&lt;String&gt; sensorCodes = <span class="keyword">new</span> <span class="title class_">HashSet</span>&lt;&gt;();</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (Map&lt;String, String&gt; item : dataList) &#123;</span><br><span class="line">    terminalCodes.add(item.get(<span class="string">&quot;devicecode&quot;</span>));</span><br><span class="line">    sensorCodes.add(item.get(<span class="string">&quot;productflag&quot;</span>));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>然后一次性查出所有实时数据：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span></span><br><span class="line">  terminal_code,</span><br><span class="line">  sensor_code,</span><br><span class="line">  <span class="keyword">value</span>,</span><br><span class="line">  <span class="type">time</span></span><br><span class="line"><span class="keyword">FROM</span> data_latest</span><br><span class="line"><span class="keyword">WHERE</span> terminal_code <span class="keyword">IN</span> (...)</span><br><span class="line">  <span class="keyword">AND</span> sensor_code <span class="keyword">IN</span> (...);</span><br></pre></td></tr></table></figure>
+
+<p>查出来以后，放进一个 Map：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Map&lt;String, Map&lt;String, String&gt;&gt; latestDataCache = <span class="keyword">new</span> <span class="title class_">HashMap</span>&lt;&gt;();</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> (Map&lt;String, String&gt; row : batchLatest) &#123;</span><br><span class="line">    <span class="type">String</span> <span class="variable">key</span> <span class="operator">=</span> row.get(<span class="string">&quot;terminal_code&quot;</span>) + <span class="string">&quot;::&quot;</span> + row.get(<span class="string">&quot;sensor_code&quot;</span>);</span><br><span class="line">    latestDataCache.put(key, row);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>后面不管是计算最新数据时间、组装实时值，还是计算预警，都从这个 Map 里取：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">String</span> <span class="variable">key</span> <span class="operator">=</span> terminalCode + <span class="string">&quot;::&quot;</span> + sensorCode;</span><br><span class="line">Map&lt;String, String&gt; latest = latestDataCache.get(key);</span><br></pre></td></tr></table></figure>
+
+<p>摄像头编码也是同样的思路。原来是每个终端查一次：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span> camera_code_</span><br><span class="line"><span class="keyword">FROM</span> t_ddbzspxx</span><br><span class="line"><span class="keyword">WHERE</span> camera_iot_code_ <span class="operator">=</span> ?;</span><br></pre></td></tr></table></figure>
+
+<p>优化后改成一次批量查：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span></span><br><span class="line">  camera_iot_code_ <span class="keyword">AS</span> terminalCode,</span><br><span class="line">  camera_code_ <span class="keyword">AS</span> cameraIndexCode</span><br><span class="line"><span class="keyword">FROM</span> t_ddbzspxx</span><br><span class="line"><span class="keyword">WHERE</span> camera_iot_code_ <span class="keyword">IN</span> (...);</span><br></pre></td></tr></table></figure>
+
+<p>再构造成 <code>terminalCode -&gt; cameraIndexCode</code> 的 Map，组装结果时直接取。</p>
+<p>这个优化没有引入复杂技术，也没有改变业务语义，但效果非常明显：数据库调用从上百次降到个位数，接口耗时自然就下来了。</p>
+<h2 id="四、接口之间也要避免重复调用"><a href="#四、接口之间也要避免重复调用" class="headerlink" title="四、接口之间也要避免重复调用"></a>四、接口之间也要避免重复调用</h2><p><code>initiateDispatch</code> 还有另一个性能点：它内部需要当前泵站数据，也需要上游泵站数据。</p>
+<p>一个最直接的写法是调用两次 <code>getMonitoring</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">第一次：只查当前泵站</span><br><span class="line">第二次：查所有上游泵站</span><br></pre></td></tr></table></figure>
+
+<p>这在代码结构上很好理解，但性能上等于把 <code>getMonitoring</code> 的整套流程跑了两遍。坐标转换、批量查询、预警计算都会重复发生。</p>
+<p>更好的方式是先查出上游泵站编号，然后把当前泵站和上游泵站合成一个列表：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">List&lt;String&gt; allCodes = <span class="keyword">new</span> <span class="title class_">ArrayList</span>&lt;&gt;();</span><br><span class="line">allCodes.add(currentTerminalCode);</span><br><span class="line">allCodes.addAll(upstreamCodes);</span><br></pre></td></tr></table></figure>
+
+<p>再一次性调用：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">screenIotService.getMonitoring(<span class="string">&quot;bz&quot;</span>, <span class="literal">null</span>, <span class="literal">null</span>, allCodes);</span><br></pre></td></tr></table></figure>
+
+<p>拿到结果后，在内存里把当前泵站和上游泵站分开。这样既复用了 <code>getMonitoring</code> 的批量能力，也避免了接口级别的重复开销。</p>
+<h2 id="五、让-AI-写-SQL-时，提示词要补上性能约束"><a href="#五、让-AI-写-SQL-时，提示词要补上性能约束" class="headerlink" title="五、让 AI 写 SQL 时，提示词要补上性能约束"></a>五、让 AI 写 SQL 时，提示词要补上性能约束</h2><p>这次问题让我意识到，很多 AI 生成的 SQL 不是“不对”，而是“只对当前最小场景负责”。如果提示词太简单，AI 会优先满足返回字段和业务条件，不一定主动追问数据量、延迟、索引和调用次数。</p>
+<p>所以现在我会把 SQL 需求写得更具体：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">请实现这个查询逻辑，但不要只保证功能正确，还要考虑性能。</span><br><span class="line"></span><br><span class="line">请在给出 SQL 和代码前先说明：</span><br><span class="line">1. 这个接口预计会产生几次数据库调用。</span><br><span class="line">2. 是否存在循环里调用 Mapper/DAO 的 N+1 查询。</span><br><span class="line">3. 哪些数据可以先批量查出，再用 Map 在内存中复用。</span><br><span class="line">4. IN 查询的数据量可能有多大，是否需要分批。</span><br><span class="line">5. 关键 WHERE 条件是否有索引，无法确认时请标注未验证。</span><br><span class="line">6. 如果接口依赖另一个接口，是否会重复执行相同查询。</span><br><span class="line"></span><br><span class="line">代码实现时，请优先使用批量查询、JOIN 或一次查询后内存分组，避免在 for 循环中访问数据库。</span><br></pre></td></tr></table></figure>
+
+<p>这个提示词会把 AI 的注意力从“怎么查到数据”拉到“用什么代价查到数据”。</p>
+<h2 id="六、代码审查时重点搜什么"><a href="#六、代码审查时重点搜什么" class="headerlink" title="六、代码审查时重点搜什么"></a>六、代码审查时重点搜什么</h2><p>如果已经让 AI 写完了代码，我会重点检查几类信号。</p>
+<p>第一，搜索循环里的 Mapper 调用：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">for (...) &#123;</span><br><span class="line">    xxxMapper.xxx(...)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>不是说循环里调用 Mapper 一定错，但它一定值得追问：这是不是可以批量查？如果循环次数从 10 变成 1000，会发生什么？</p>
+<p>第二，检查同一张表是否被重复查。比如这次 <code>data_latest</code> 同时被用来取最新时间、实时值和预警计算。如果每个步骤都各查一遍，就是典型浪费。</p>
+<p>第三，检查接口之间是否重复跑完整流程。一个接口调用另一个重接口多次，很容易让数据库调用成倍增长。</p>
+<p>第四，把环境延迟算进去。性能评估不能只看本地开发库。只要数据库在远端、跨网络或走 VPN，数据库往返次数就会变成核心指标。</p>
+<h2 id="七、总结"><a href="#七、总结" class="headerlink" title="七、总结"></a>七、总结</h2><p>AI 能很快写出一段“能跑”的 SQL，但后端接口不是只要能跑就行。数据量、调用次数、网络延迟、索引和复用方式，都会决定这个接口上线后是稳定还是拖垮页面。</p>
+<p>这次优化给我的经验可以概括成一句话：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">让 AI 写 SQL 时，不要只问“怎么查”，还要问“查几次、扫多少、能不能复用、慢在哪里”。</span><br></pre></td></tr></table></figure>
+
+<p>功能正确是第一步，性能正确才是能交付的后端代码。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/06/17/ai-assisted-dev-schema-verification/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2026/06/17/ai-assisted-dev-schema-verification/" class="post-title-link" itemprop="url">AI 写研发计划时，先别急着相信数据库字段</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2026-06-17 21:30:00" itemprop="dateCreated datePublished" datetime="2026-06-17T21:30:00+08:00">2026-06-17</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-07-02 00:05:49" itemprop="dateModified" datetime="2026-07-02T00:05:49+08:00">2026-07-02</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>最近做智慧调度相关需求时，我对 AI 辅助写代码这件事有了一个更现实的认识：AI 不是不会写研发设计，也不是不会整理执行计划，真正危险的是它会把“看起来合理”包装得很完整。</p>
+<p>尤其是涉及数据库字段、接口参数、旧系统表结构时，如果只是把需求文档丢给 AI，让它直接写方案，它很容易根据字段名、业务含义和常见命名习惯补全细节。方案读起来通顺，步骤也像那么回事，但里面可能藏着一个致命前提：这些字段到底存不存在，AI 并没有真的验证过。</p>
+<p>这篇文章记录一次 <code>fang_xiang_</code> 字段排查带来的教训，以及我后来调整出来的一套 AI 协作流程。</p>
+<h2 id="一、问题不在于-AI-不会写计划"><a href="#一、问题不在于-AI-不会写计划" class="headerlink" title="一、问题不在于 AI 不会写计划"></a>一、问题不在于 AI 不会写计划</h2><p>在这个需求里，后端要给智慧调度大屏提供两个能力：</p>
+<ol>
+<li>运行监测接口返回泵站实时运行数据、预警状态和泵机状态。</li>
+<li>发起调度接口根据当前预警泵站，找到上游泵站，并给出建议操作。</li>
+</ol>
+<p>第二点依赖调度路线配置表。简单说，系统需要知道一条路线是正向还是反向，才能判断“当前泵站的上游是谁”。</p>
+<p>如果路线是正向，水从起点流向终点，当前泵站在终点时，起点就是上游；如果路线是反向，逻辑正好反过来。这个判断依赖一个方向字段，也就是 <code>fang_xiang_</code>。</p>
+<p>从业务上看，这个字段非常自然，设计文档里也写得很合理。AI 根据文档继续往下写执行计划时，也能把逻辑组织得很完整：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">fang_xiang_ = 正向：起点是上游，终点是下游</span><br><span class="line">fang_xiang_ = 反向：终点是上游，起点是下游</span><br><span class="line">fang_xiang_ 为空：兼容旧数据，双向匹配</span><br></pre></td></tr></table></figure>
+
+<p>问题是，研发计划不能只停留在“逻辑合理”。它还必须回答一个更硬的问题：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">真实数据库里，字段到底叫什么？</span><br></pre></td></tr></table></figure>
+
+<h2 id="二、一次-fang-xiang-字段误判"><a href="#二、一次-fang-xiang-字段误判" class="headerlink" title="二、一次 fang_xiang_ 字段误判"></a>二、一次 <code>fang_xiang_</code> 字段误判</h2><p>当时我的流程其实已经比“直接让 AI 写代码”谨慎了一点。我先让 AI 根据需求写执行计划文档，然后再让 AI 核查文档有没有问题。</p>
+<p>听起来已经多了一道保险，但这次保险并没有完全起作用。</p>
+<p>AI 在核查调度配置表时，先查到了一个旧环境里的表结构。查询结果显示 <code>t_dispatch_setting</code> 只有 26 列，没有 <code>fang_xiang_</code>，也没有与 <code>fang</code>、<code>xiang</code> 相关的字段。于是 AI 给出的结论是：设计文档中的 <code>fang_xiang_</code> 字段不存在。</p>
+<p>这个结论看起来有证据，但它是错的。</p>
+<p>后来重新对照项目里的数据源配置，确认服务实际使用的是另一个环境里的 <code>hbp</code> 数据源。换到项目真实配置的数据库地址，并且按 schema 完整查询以后，表结构变成了 28 列，最后两列中就包含：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">lu_xian_</span><br><span class="line">fang_xiang_</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，字段不是不存在，而是第一次查错了环境。更进一步，还发现设计文档里另一个字段也需要修正：文档里的 <code>qi_dian_bia_hao</code>，真实字段是 <code>qi_dian_bian_hao_</code>。</p>
+<p>这次问题暴露的不是单个字段名，而是 AI 辅助研发里一个更普遍的风险：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">AI 可以帮你核查，但前提是它核查的是正确的信息源。</span><br></pre></td></tr></table></figure>
+
+<h2 id="三、为什么-AI-容易犯这种错"><a href="#三、为什么-AI-容易犯这种错" class="headerlink" title="三、为什么 AI 容易犯这种错"></a>三、为什么 AI 容易犯这种错</h2><p>AI 写研发计划时，很容易出现三类“想当然”。</p>
+<p>第一类是字段想当然。看到“起点编号”，就推测字段可能叫 <code>start_code</code>、<code>qi_dian_bia_hao</code> 或类似名字；看到“方向”，就认为表里应该有方向字段。推测不一定错，但推测不能当成事实。</p>
+<p>第二类是环境想当然。项目可能有本地开发库、测试库、VPN 环境、生产只读库，甚至同名表在不同环境里结构不同。如果 AI 没有先读取项目配置，而是用旧脚本、旧连接或记忆里的地址去查库，结论就会偏掉。</p>
+<p>第三类是核查想当然。很多时候我们说“帮我检查这个设计有没有问题”，AI 会做文本层面的检查：字段命名是否前后一致、逻辑是否顺、接口参数是否完整。但真正的研发核查必须落到证据上：配置从哪里来，SQL 查了什么，结果有多少列，差异在哪里。</p>
+<p>这也是我这次最大的教训：不能只让 AI 给结论，要让它交证据链。</p>
+<h2 id="四、把研发计划写成带证据的计划"><a href="#四、把研发计划写成带证据的计划" class="headerlink" title="四、把研发计划写成带证据的计划"></a>四、把研发计划写成带证据的计划</h2><p>后来我更倾向于把执行计划文档分成两层：上层写业务方案，下层写验证证据。</p>
+<p>比如涉及数据库表时，不只写“使用 <code>t_dispatch_setting.fang_xiang_</code> 判断方向”，还要补上这些内容：</p>
+<table>
+<thead>
+<tr>
+<th>核查项</th>
+<th>应该记录什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>数据源</td>
+<td>来自哪个配置文件、哪个 datasource 名称</td>
+</tr>
+<tr>
+<td>表名与 schema</td>
+<td>表属于哪个 schema，是否存在同名表</td>
+</tr>
+<tr>
+<td>字段清单</td>
+<td>关键字段的真实字段名、类型、是否为空</td>
+</tr>
+<tr>
+<td>差异说明</td>
+<td>设计文档字段和真实字段不一致的地方</td>
+</tr>
+<tr>
+<td>验证方式</td>
+<td>使用了什么 SQL 或工具查询</td>
+</tr>
+<tr>
+<td>未确认项</td>
+<td>无法验证时明确标为“未验证”，不能默认为存在</td>
+</tr>
+</tbody></table>
+<p>字段核查 SQL 也应该尽量写得明确。例如 SQL Server 可以这样查：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span></span><br><span class="line">  TABLE_SCHEMA,</span><br><span class="line">  TABLE_NAME,</span><br><span class="line">  ORDINAL_POSITION,</span><br><span class="line">  COLUMN_NAME,</span><br><span class="line">  DATA_TYPE</span><br><span class="line"><span class="keyword">FROM</span> INFORMATION_SCHEMA.COLUMNS</span><br><span class="line"><span class="keyword">WHERE</span> TABLE_SCHEMA <span class="operator">=</span> <span class="string">&#x27;dbo&#x27;</span></span><br><span class="line">  <span class="keyword">AND</span> TABLE_NAME <span class="operator">=</span> <span class="string">&#x27;t_dispatch_setting&#x27;</span></span><br><span class="line"><span class="keyword">ORDER</span> <span class="keyword">BY</span> ORDINAL_POSITION;</span><br></pre></td></tr></table></figure>
+
+<p>如果要按关键字搜索，也要注意条件优先级，不要因为 <code>AND</code>、<code>OR</code> 没有加括号导致查错范围：</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">SELECT</span></span><br><span class="line">  TABLE_SCHEMA,</span><br><span class="line">  TABLE_NAME,</span><br><span class="line">  COLUMN_NAME,</span><br><span class="line">  DATA_TYPE</span><br><span class="line"><span class="keyword">FROM</span> INFORMATION_SCHEMA.COLUMNS</span><br><span class="line"><span class="keyword">WHERE</span> TABLE_SCHEMA <span class="operator">=</span> <span class="string">&#x27;dbo&#x27;</span></span><br><span class="line">  <span class="keyword">AND</span> TABLE_NAME <span class="operator">=</span> <span class="string">&#x27;t_dispatch_setting&#x27;</span></span><br><span class="line">  <span class="keyword">AND</span> (</span><br><span class="line">    COLUMN_NAME <span class="keyword">LIKE</span> <span class="string">&#x27;%fang%&#x27;</span></span><br><span class="line">    <span class="keyword">OR</span> COLUMN_NAME <span class="keyword">LIKE</span> <span class="string">&#x27;%xiang%&#x27;</span></span><br><span class="line">  );</span><br></pre></td></tr></table></figure>
+
+<p>这些内容看起来有点啰嗦，但它能把“AI 说应该是这样”变成“当前项目配置下验证过就是这样”。</p>
+<h2 id="五、我现在更推荐的-AI-协作流程"><a href="#五、我现在更推荐的-AI-协作流程" class="headerlink" title="五、我现在更推荐的 AI 协作流程"></a>五、我现在更推荐的 AI 协作流程</h2><p>经过这次问题后，我现在会把 AI 写研发计划的流程拆成几步。</p>
+<p>第一步，先让 AI 读项目，而不是直接写方案。它需要先看接口层、Service 层、Mapper、配置文件，以及已有执行记录。尤其是多数据源项目，必须先确认真实 datasource。</p>
+<p>第二步，让 AI 输出“假设清单”。比如它认为会用到哪些表、哪些字段、哪些接口参数。这里的重点是把隐含假设显性化。</p>
+<p>第三步，再让 AI 做“证据核查”。字段存在性、字段类型、枚举值、旧接口返回结构，都要尽量连到真实来源。如果没有权限连接数据库，就必须标注为未验证。</p>
+<p>第四步，生成执行计划。这个时候计划里引用的字段，应该已经有来源；没有来源的内容，不能写成确定结论。</p>
+<p>第五步，反向审查计划。审查重点不再是“文章通不通顺”，而是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">有没有字段没有证据？</span><br><span class="line">有没有环境和项目配置不一致？</span><br><span class="line">有没有设计文档字段与真实字段差异未处理？</span><br><span class="line">有没有把推断写成事实？</span><br></pre></td></tr></table></figure>
+
+<h2 id="六、一段更安全的提示词"><a href="#六、一段更安全的提示词" class="headerlink" title="六、一段更安全的提示词"></a>六、一段更安全的提示词</h2><p>如果要让 AI 写研发执行计划，我现在会把提示词写得更硬一点：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">请根据当前项目写一份研发执行计划，但禁止基于字段名或业务含义猜测数据库结构。</span><br><span class="line"></span><br><span class="line">开始写计划前，请先完成这些核查：</span><br><span class="line">1. 读取项目配置中实际使用的数据源，说明每个相关表对应哪个 datasource。</span><br><span class="line">2. 对涉及的表查询 INFORMATION_SCHEMA，列出关键字段的真实字段名、类型和 schema。</span><br><span class="line">3. 对照需求文档中的字段名与真实字段名，标出一致、差异和未验证项。</span><br><span class="line">4. 如果无法连接数据库或无法确认字段，必须标注【未验证】，不能继续把它当成确定事实。</span><br><span class="line">5. 执行计划中每个数据库字段第一次出现时，都要能追溯到核查结果。</span><br><span class="line"></span><br><span class="line">最后再检查一遍：是否存在“看起来合理但没有证据”的字段或 SQL 条件。</span><br></pre></td></tr></table></figure>
+
+<p>这个提示词的目的不是让 AI 变慢，而是让它先建立事实边界。研发计划越完整，越需要知道哪些内容是真实验证过的，哪些只是根据材料推断。</p>
+<h2 id="七、总结"><a href="#七、总结" class="headerlink" title="七、总结"></a>七、总结</h2><p>AI 很适合帮我们整理需求、拆任务、补边界条件，但它默认追求的是“给出一个完整答案”。数据库字段、接口结构、环境配置这些东西，不能只靠完整答案，必须靠真实验证。</p>
+<p>这次 <code>fang_xiang_</code> 字段的问题提醒我：AI 写计划不是终点，带证据的计划才是起点。</p>
+<p>以后再让 AI 参与研发设计，我会默认加上一条约束：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">凡是影响代码实现的事实，都必须能追溯到项目配置、真实库表、已有代码或明确的用户确认。</span><br></pre></td></tr></table></figure>
+
+<p>这条约束看起来简单，但它能挡住很多“AI 写得很像对的，其实没验证”的问题。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
     <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/06/09/codex-chrome-skill-debug-comment-lazyload/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1758,209 +2083,11 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/23/hexo-github-pages-guide/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/IMG_1578.jpeg">
-      <meta itemprop="name" content="Libra">
-      <meta itemprop="description" content="记录技术、项目与思考">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Libra's notes">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2026/05/23/hexo-github-pages-guide/" class="post-title-link" itemprop="url">使用 Hexo 写博客，并发布到 GitHub Pages</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-
-              <time title="创建时间：2026-05-23 00:00:00" itemprop="dateCreated datePublished" datetime="2026-05-23T00:00:00+08:00">2026-05-23</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">更新于</span>
-                <time title="修改时间：2026-06-09 17:02:23" itemprop="dateModified" datetime="2026-06-09T17:02:23+08:00">2026-06-09</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">分类于</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/%E5%90%8E%E7%AB%AF%E5%B7%A5%E7%A8%8B/" itemprop="url" rel="index"><span itemprop="name">后端工程</span></a>
-                </span>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>Hexo 是一个静态博客框架。它的工作方式很适合初学者理解：我们用 Markdown 写文章，Hexo 把文章和主题模板组合起来，生成一组静态 HTML、CSS 和 JavaScript 文件。最后，把这些静态文件发布到 GitHub Pages，就可以拥有一个可以访问的网站。</p>
-<h2 id="一、准备环境"><a href="#一、准备环境" class="headerlink" title="一、准备环境"></a>一、准备环境</h2><p>使用 Hexo 前，需要先安装两个基础工具：</p>
-<ol>
-<li>Node.js：用来运行 Hexo。</li>
-<li>Git：用来管理代码，并把博客推送到 GitHub。</li>
-</ol>
-<p>安装完成后，可以在终端检查版本：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">node -v</span><br><span class="line">npm -v</span><br><span class="line">git --version</span><br></pre></td></tr></table></figure>
-
-<p>如果这些命令都能输出版本号，就说明环境基本准备好了。</p>
-<h2 id="二、创建-Hexo-博客项目"><a href="#二、创建-Hexo-博客项目" class="headerlink" title="二、创建 Hexo 博客项目"></a>二、创建 Hexo 博客项目</h2><p>第一次使用 Hexo 时，可以先全局安装 Hexo 命令行工具：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">npm install -g hexo-cli</span><br></pre></td></tr></table></figure>
-
-<p>然后创建一个新的博客项目：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">hexo init myblog</span><br><span class="line"><span class="built_in">cd</span> myblog</span><br><span class="line">npm install</span><br></pre></td></tr></table></figure>
-
-<p>执行完成后，项目里会出现几个重要目录：</p>
-<ul>
-<li><code>source/_posts/</code>：存放博客文章。</li>
-<li><code>themes/</code>：存放主题。</li>
-<li><code>_config.yml</code>：博客的主配置文件。</li>
-<li><code>public/</code>：生成后的静态网站文件会放在这里。</li>
-</ul>
-<h2 id="三、创建一篇文章"><a href="#三、创建一篇文章" class="headerlink" title="三、创建一篇文章"></a>三、创建一篇文章</h2><p>Hexo 可以用命令创建新文章：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo new <span class="string">&quot;我的第一篇博客&quot;</span></span><br></pre></td></tr></table></figure>
-
-<p>执行后，会在 <code>source/_posts/</code> 目录下生成一个 Markdown 文件。打开它后，会看到类似这样的内容：</p>
-<figure class="highlight markdown"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">---</span><br><span class="line">title: 我的第一篇博客</span><br><span class="line">date: 2026-05-23 10:00:00</span><br><span class="line"><span class="section">tags:</span></span><br><span class="line"><span class="section">---</span></span><br></pre></td></tr></table></figure>
-
-<p>上方 <code>---</code> 包起来的部分叫 Front Matter，用来记录文章标题、日期、标签、分类等信息。下面就可以正常写 Markdown 内容。</p>
-<h2 id="四、本地预览博客"><a href="#四、本地预览博客" class="headerlink" title="四、本地预览博客"></a>四、本地预览博客</h2><p>写完文章后，可以先在本地启动预览服务器：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo server</span><br></pre></td></tr></table></figure>
-
-<p>通常终端会显示一个本地地址：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http://localhost:4000</span><br></pre></td></tr></table></figure>
-
-<p>在浏览器打开这个地址，就能看到自己的博客页面。修改文章后，刷新页面一般就可以看到更新。</p>
-<h2 id="五、把-Markdown-转成-HTML"><a href="#五、把-Markdown-转成-HTML" class="headerlink" title="五、把 Markdown 转成 HTML"></a>五、把 Markdown 转成 HTML</h2><p>Hexo 的核心步骤就是“生成静态文件”。运行：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo generate</span><br></pre></td></tr></table></figure>
-
-<p>也可以简写为：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo g</span><br></pre></td></tr></table></figure>
-
-<p>执行后，Hexo 会把 <code>source/_posts/</code> 里的 Markdown 文章转成 HTML，并输出到 <code>public/</code> 目录。比如一篇文章最终可能会变成：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">public/2026/05/23/my-post/index.html</span><br></pre></td></tr></table></figure>
-
-<p>这个 <code>index.html</code> 就是浏览器真正打开的网页文件。</p>
-<h2 id="六、创建-GitHub-仓库"><a href="#六、创建-GitHub-仓库" class="headerlink" title="六、创建 GitHub 仓库"></a>六、创建 GitHub 仓库</h2><p>要使用 GitHub Pages，需要先在 GitHub 上创建一个仓库。</p>
-<p>如果想做个人主页，仓库名通常写成：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">你的用户名.github.io</span><br></pre></td></tr></table></figure>
-
-<p>例如 GitHub 用户名是 <code>alice</code>，仓库名就是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">alice.github.io</span><br></pre></td></tr></table></figure>
-
-<p>这种仓库发布后，网站地址通常是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://alice.github.io</span><br></pre></td></tr></table></figure>
-
-<p>如果仓库名不是这种格式，比如叫 <code>myblog</code>，网站地址通常会是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://你的用户名.github.io/myblog/</span><br></pre></td></tr></table></figure>
-
-<p>这种情况下，需要把 <code>_config.yml</code> 里的 <code>url</code> 配置成对应地址。</p>
-<h2 id="七、配置-GitHub-Pages-发布"><a href="#七、配置-GitHub-Pages-发布" class="headerlink" title="七、配置 GitHub Pages 发布"></a>七、配置 GitHub Pages 发布</h2><p>常见做法是把 Hexo 生成出来的 <code>public/</code> 文件发布到 GitHub Pages。可以先安装 Hexo 的 Git 部署插件：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">npm install hexo-deployer-git --save</span><br></pre></td></tr></table></figure>
-
-<p>然后修改 <code>_config.yml</code> 末尾的 <code>deploy</code> 配置：</p>
-<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">deploy:</span></span><br><span class="line">  <span class="attr">type:</span> <span class="string">git</span></span><br><span class="line">  <span class="attr">repo:</span> <span class="string">https://github.com/你的用户名/你的用户名.github.io.git</span></span><br><span class="line">  <span class="attr">branch:</span> <span class="string">main</span></span><br></pre></td></tr></table></figure>
-
-<p>如果使用的是项目页仓库，比如 <code>myblog</code>，配置可能是：</p>
-<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">deploy:</span></span><br><span class="line">  <span class="attr">type:</span> <span class="string">git</span></span><br><span class="line">  <span class="attr">repo:</span> <span class="string">https://github.com/你的用户名/myblog.git</span></span><br><span class="line">  <span class="attr">branch:</span> <span class="string">gh-pages</span></span><br></pre></td></tr></table></figure>
-
-<p>这里的 <code>repo</code> 要换成自己的 GitHub 仓库地址。</p>
-<h2 id="八、一键生成并部署"><a href="#八、一键生成并部署" class="headerlink" title="八、一键生成并部署"></a>八、一键生成并部署</h2><p>配置完成后，可以执行：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">hexo clean</span><br><span class="line">hexo generate</span><br><span class="line">hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>也可以简写成：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">hexo clean</span><br><span class="line">hexo g</span><br><span class="line">hexo d</span><br></pre></td></tr></table></figure>
-
-<p>这几步的意思是：</p>
-<ol>
-<li><code>hexo clean</code>：清理旧的生成文件。</li>
-<li><code>hexo generate</code>：重新生成 HTML 静态文件。</li>
-<li><code>hexo deploy</code>：把生成结果推送到 GitHub。</li>
-</ol>
-<p>推送完成后，进入 GitHub 仓库的 Settings，找到 Pages 页面，确认发布分支设置正确。稍等一会儿，GitHub Pages 就会生成网站地址。</p>
-<h2 id="九、一次-GitHub-Pages-构建失败的排查记录"><a href="#九、一次-GitHub-Pages-构建失败的排查记录" class="headerlink" title="九、一次 GitHub Pages 构建失败的排查记录"></a>九、一次 GitHub Pages 构建失败的排查记录</h2><p>第一次部署时，我遇到了一个很典型的问题：<code>hexo deploy</code> 已经把 <code>public/</code> 里的文件推送到了 GitHub 仓库，仓库根目录里也能看到 <code>index.html</code>、<code>css/</code>、<code>js/</code>、<code>archives/</code> 等静态文件，但是浏览器访问：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://moyu-yunru.github.io</span><br></pre></td></tr></table></figure>
-
-<p>页面仍然显示 404：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">There isn&#x27;t a GitHub Pages site here.</span><br></pre></td></tr></table></figure>
-
-<p>当时 GitHub 仓库的 Pages 设置页面显示，站点来源是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">main / (root)</span><br></pre></td></tr></table></figure>
-
-<p>这说明分支和目录看起来是对的。继续查看仓库首页中间的检查状态，发现有一条红色失败提示：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Some checks were not successful</span><br><span class="line">pages build and deployment / build (dynamic) Failing</span><br><span class="line">pages build and deployment / deploy (dynamic) Skipped</span><br><span class="line">pages build and deployment / report-build-status (dynamic) Successful</span><br></pre></td></tr></table></figure>
-
-<p>这说明问题不在于文件没有推送上去，而是 GitHub Pages 的构建流程失败了。</p>
-<blockquote>
-<p>当时两张截图里最关键的信息是：第一张 Pages 设置截图确认了发布来源是 <code>main / (root)</code>；第二张仓库首页截图确认了根目录存在 <code>index.html</code>，但 Pages 的 build 检查失败，所以网站仍然 404。</p>
-</blockquote>
-<p>对于 Hexo 这种已经生成好的静态网站，GitHub Pages 不需要再用 Jekyll 处理一遍。为了告诉 GitHub “直接发布这些静态文件就好”，可以在 Hexo 的 <code>source/</code> 目录下放一个 <code>.nojekyll</code> 文件：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">touch</span> <span class="built_in">source</span>/.nojekyll</span><br></pre></td></tr></table></figure>
-
-<p>然后重新生成并部署：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">hexo clean</span><br><span class="line">hexo generate</span><br><span class="line">hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>这样 <code>hexo generate</code> 时，<code>.nojekyll</code> 会被复制到 <code>public/</code> 目录；<code>hexo deploy</code> 再把它一起推送到 GitHub。GitHub Pages 看到 <code>.nojekyll</code> 后，就会跳过 Jekyll 处理，直接发布 Hexo 已经生成好的静态网页。</p>
-<p>如果后续再遇到 GitHub Pages 404，可以按这个顺序排查：</p>
-<ol>
-<li>仓库名是否是 <code>用户名.github.io</code>。</li>
-<li>Pages 设置里的分支和目录是否是实际部署的位置，例如 <code>main / (root)</code>。</li>
-<li>仓库根目录是否真的有 <code>index.html</code>。</li>
-<li>Actions 或仓库首页的 Checks 是否有失败项。</li>
-<li>Hexo 静态站点是否包含 <code>.nojekyll</code>。</li>
-</ol>
-<p>这次问题解决后，我更清楚地理解了：<code>hexo deploy</code> 只是把文件推到 GitHub，真正让网站可以访问，还需要 GitHub Pages 成功完成发布流程。</p>
-<h2 id="十、日常写博客流程"><a href="#十、日常写博客流程" class="headerlink" title="十、日常写博客流程"></a>十、日常写博客流程</h2><p>以后每次写新文章，大致流程都是：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">hexo new <span class="string">&quot;文章标题&quot;</span></span><br><span class="line">hexo server</span><br><span class="line">hexo clean</span><br><span class="line">hexo generate</span><br><span class="line">hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>如果只是想在本地转成 HTML，不需要发布到 GitHub，只运行：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo generate</span><br></pre></td></tr></table></figure>
-
-<p>然后查看 <code>public/</code> 目录即可。</p>
-<h2 id="十一、总结"><a href="#十一、总结" class="headerlink" title="十一、总结"></a>十一、总结</h2><p>Hexo 和 GitHub Pages 的组合非常适合搭建个人博客。Hexo 负责把 Markdown 文章转换成静态网页，GitHub Pages 负责把这些网页托管到互联网上。</p>
-<p>可以把整个流程理解成一句话：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">写 Markdown -&gt; Hexo 生成 HTML -&gt; GitHub Pages 发布网站</span><br></pre></td></tr></table></figure>
-
-<p>当你理解了这个流程后，博客就不再只是一个工具，而是一个可以持续记录学习、整理经验、展示作品的小网站。</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
+  <nav class="pagination">
+    <span class="page-number current">1</span><a class="page-number" href="/blog/page/2/">2</a><a class="extend next" rel="next" href="/blog/page/2/"><i class="fa fa-angle-right" aria-label="下一页"></i></a>
+  </nav>
 
 
 
@@ -2027,7 +2154,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">9</span>
+          <span class="site-state-item-count">11</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
@@ -2040,7 +2167,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">23</span>
+        <span class="site-state-item-count">28</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
@@ -2083,7 +2210,7 @@
 </div>
 
 <div class="libra-footer-extra">
-  <span>共撰写了 9 篇文章</span>
+  <span>共撰写了 11 篇文章</span>
   <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
 </div>
 
