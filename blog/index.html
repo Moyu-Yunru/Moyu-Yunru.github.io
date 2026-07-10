@@ -179,7 +179,7 @@
       <header class="post-header">
         <h2 class="post-title" itemprop="name headline">
           
-            <a href="/2026/07/09/harness-development-workflow/" class="post-title-link" itemprop="url">从 OpenSpec 到 Harness：给 AI 编码做一个模式选择器</a>
+            <a href="/2026/07/09/harness-development-workflow/" class="post-title-link" itemprop="url">用 Development Workflow Orchestrator 串联 DDD Skill 开发工作流</a>
         </h2>
 
         <div class="post-meta">
@@ -188,10 +188,16 @@
                 <i class="far fa-calendar"></i>
               </span>
               <span class="post-meta-item-text">发表于</span>
-              
 
-              <time title="创建时间：2026-07-09 23:28:41 / 修改时间：23:30:56" itemprop="dateCreated datePublished" datetime="2026-07-09T23:28:41+08:00">2026-07-09</time>
+              <time title="创建时间：2026-07-09 23:28:41" itemprop="dateCreated datePublished" datetime="2026-07-09T23:28:41+08:00">2026-07-09</time>
             </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-07-11 00:00:23" itemprop="dateModified" datetime="2026-07-11T00:00:23+08:00">2026-07-11</time>
+              </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
                 <i class="far fa-folder"></i>
@@ -215,8 +221,8 @@
       
           <p>前两篇文章分别讲了两件事。</p>
 <p>第一篇是 <a href="/2026/07/07/openspec-superpowers-workflow/">OpenSpec 和 Superpowers 怎么配合</a>：当需求比较大时，先用 OpenSpec 生成设计、任务和规范，再用 Superpowers 约束设计验证、TDD、实现和代码审查。</p>
-<p>第二篇是 <a href="/2026/07/07/scenario-thinking-workflow/">scenario-thinking 怎么用于二次开发</a>：当需求没有大到需要完整流程，但业务边界又不能靠 AI 自己猜时，先做场景穷举和数值推演，再按推演文档实现。</p>
-<p>这篇可以看作前两篇的总结：<strong>我们不应该只问“用哪个模型”，而应该先问“这个需求该走哪种开发模式”。</strong></p>
+<p>第二篇是 <a href="/2026/07/08/scenario-thinking-workflow/">scenario-thinking 怎么用于二次开发</a>：当需求没有大到需要完整流程，但业务边界又不能靠 AI 自己猜时，先做场景穷举和数值推演，再按推演文档实现。</p>
+<p>这篇可以看作前两篇的总结和进一步落地：<strong>我们不应该只问“用哪个模型”，而应该先问“这个需求该走哪种开发模式”，再决定需要调用哪些 Skill。</strong></p>
 <p>这就是 Harness 的位置。</p>
 <h2 id="Harness-不是一个具体工具"><a href="#Harness-不是一个具体工具" class="headerlink" title="Harness 不是一个具体工具"></a>Harness 不是一个具体工具</h2><p>Harness 直译有“马具、缰绳”的意思。放到 AI 编码里，它不是某一个固定插件，也不是某一个模型能力，而是一类工程化约束手段。</p>
 <p>我更愿意这样理解它：</p>
@@ -246,7 +252,11 @@
 <li>推理发散风险：通过场景推演、设计文档和任务清单，把推理步骤外化；</li>
 <li>实现越界风险：通过模式隔离和完成标准，限制 AI 随意扩展范围。</li>
 </ul>
-<h2 id="三条开发路线"><a href="#三条开发路线" class="headerlink" title="三条开发路线"></a>三条开发路线</h2><p>Harness 的核心，是把需求分到三条路线里。</p>
+<h2 id="Development-Workflow-Orchestrator：先选择开发路线"><a href="#Development-Workflow-Orchestrator：先选择开发路线" class="headerlink" title="Development Workflow Orchestrator：先选择开发路线"></a>Development Workflow Orchestrator：先选择开发路线</h2><p>为了让 Harness 真正生效，我把模式判断和 Skill 调用规则整理成 <code>DEVELOPMENT_WORKFLOW_ORCHESTRATOR.md</code>，并将它命名为 <strong>Development Workflow Orchestrator（研发工作流编排器）</strong>。它可以放在 Workspace AI Rules 或 Project Rules 中，作为所有开发需求进入项目后的顶层调度规范。</p>
+<p>这个编排器本身不负责场景推演、设计或编码。它只负责三件事：判断需求体量、识别需求类型、选择并锁定开发模式。具体工作再交给对应 Skill。</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Workflow Orchestrator 决定走哪条路；</span><br><span class="line">Skill 负责把选中的那条路执行好。</span><br></pre></td></tr></table></figure>
+
+<p>编排器会把需求分到三条路线里。</p>
 <img src="../../../../images/harness-development-workflow/harness-flow.png" alt="Harness 开发设计流程图">
 
 <p>第一条是裸模型模式。</p>
@@ -356,17 +366,144 @@
 <h2 id="大需求：进入完整流程"><a href="#大需求：进入完整流程" class="headerlink" title="大需求：进入完整流程"></a>大需求：进入完整流程</h2><p>如果需求涉及多个模块、多条流程、多个页面或接口，甚至还包含权限、状态机、任务拆解、数据模型等内容，就应该进入 OpenSpec&#x2F;Superpowers 模式。</p>
 <img src="../../../../images/harness-development-workflow/large-requirement-mode.png" alt="大体量需求选择 OpenSpec 和 Superpowers 模式">
 
-<p>这时完整流程的价值会变得明显：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">/opsx:propose</span><br><span class="line">  生成 proposal、design、tasks、spec</span><br><span class="line"></span><br><span class="line">/opsx:apply</span><br><span class="line">  先验证设计和任务完整性</span><br><span class="line">  再进入 TDD 或子代理约束</span><br><span class="line">  然后按任务实现</span><br><span class="line"></span><br><span class="line">代码审查</span><br><span class="line">  检查实现是否符合设计</span><br><span class="line">  检查测试和边界是否覆盖</span><br><span class="line">  处理审查反馈</span><br></pre></td></tr></table></figure>
+<p>这时完整流程的价值会变得明显。编排器把 OpenSpec&#x2F;Superpowers 模式拆成六个 Phase：</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>触发或 Skill</th>
+<th>主要职责</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Phase 1</td>
+<td><code>/opsx:propose</code>、<code>openspec-propose</code></td>
+<td>生成 proposal、design、tasks、spec，并写入 DDD 分层约束</td>
+</tr>
+<tr>
+<td>Phase 2</td>
+<td><code>/opsx:apply</code>、<code>brainstorming</code></td>
+<td>检查 OpenSpec 产物完整性，探索项目并确认实现方案</td>
+</tr>
+<tr>
+<td>Phase 3</td>
+<td><code>subagent-driven-development</code>、TDD</td>
+<td>根据设计定义测试，建立 RED-GREEN-REFACTOR 约束</td>
+</tr>
+<tr>
+<td>Phase 4</td>
+<td><code>openspec-apply-change</code></td>
+<td>读取设计、任务和测试结果，按任务增量实现</td>
+</tr>
+<tr>
+<td>Phase 5</td>
+<td><code>requesting-code-review</code>、<code>receiving-code-review</code></td>
+<td>发起增量审查，验证反馈并逐项处理</td>
+</tr>
+<tr>
+<td>Phase 6</td>
+<td>最终验证与交付</td>
+<td>运行完整测试、检查任务状态、清理并报告结果</td>
+</tr>
+</tbody></table>
+<p>这里最需要强调的是 <code>/opsx:apply</code>。在编排器的规则里，它不是一个单独的实现命令，而是 Phase 2 到 Phase 4 的完整流程触发器：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">/opsx:apply</span><br><span class="line">  -&gt; brainstorming 设计验证</span><br><span class="line">  -&gt; TDD 测试约束</span><br><span class="line">  -&gt; openspec-apply-change 增量实现</span><br></pre></td></tr></table></figure>
 
+<p>收到 <code>/opsx:apply</code> 后，不能直接加载 <code>openspec-apply-change</code> 写代码。只有设计验证和 TDD 阶段都满足完成标准，才能进入增量开发；开发完成后，还要继续执行代码审查和最终交付。</p>
 <p>这条路线重，但适合重需求。它把“需求分析、详细设计、任务拆解、测试约束、代码审查”都放进流程里，降低大需求里最常见的两个问题：范围漂移和实现不完整。</p>
 <h2 id="模式隔离很重要"><a href="#模式隔离很重要" class="headerlink" title="模式隔离很重要"></a>模式隔离很重要</h2><p>Harness 里还有一条容易被忽略的原则：<strong>一旦选定模式，就不要随意中途切换。</strong></p>
 <p>原因是不同模式的上下文组织方式不同。</p>
 <p>裸模型模式没有设计文档；scenario-thinking 有推演文档；OpenSpec&#x2F;Superpowers 有 proposal、design、tasks、spec 和测试约束。如果中途随意切换，AI 很可能丢失前一个模式里的关键前提。</p>
+<p>这也意味着 scenario-thinking 不会在完成后自动转入 OpenSpec。两者是由编排器选择的不同模式，不是一条固定流水线。</p>
 <p>当然，模式不是永远不能升级。如果执行中发现体量被严重低估，应该暂停，说明原因，再征得用户确认后重新按更重的模式走。</p>
 <p>一个比较稳的规则是：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">可以因为风险上升而升级模式；</span><br><span class="line">不要因为嫌麻烦而降级模式。</span><br></pre></td></tr></table></figure>
 
+<h2 id="这些-Skill-做了哪些-DDD-定制"><a href="#这些-Skill-做了哪些-DDD-定制" class="headerlink" title="这些 Skill 做了哪些 DDD 定制"></a>这些 Skill 做了哪些 DDD 定制</h2><p>编排器解决的是“什么时候调用”，Skill 解决的是“调用以后怎么做”。为了让这套流程更适合当前 DDD 后端项目，我对部分 Superpowers Skill 做了调整，并新增了 OpenSpec 与 scenario-thinking 相关能力。</p>
+<p>对比原版 Superpowers 目录后，可以把变化分成三类：</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>Skill</th>
+<th>主要变化</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>新增并定制</td>
+<td><code>openspec-propose</code></td>
+<td>在标准 OpenSpec 产物后追加 DDD 详细分层设计</td>
+</tr>
+<tr>
+<td>新增</td>
+<td><code>openspec-apply-change</code></td>
+<td>读取设计、任务和测试约束，按任务增量实现</td>
+</tr>
+<tr>
+<td>原创</td>
+<td><code>scenario-thinking</code></td>
+<td>在编码前完成场景穷举、数值推演和详细设计</td>
+</tr>
+<tr>
+<td>流程调整</td>
+<td><code>subagent-driven-development</code></td>
+<td>将任务审查拆成规格符合性与代码质量两道门</td>
+</tr>
+<tr>
+<td>环境适配</td>
+<td><code>requesting-code-review</code> 等</td>
+<td>调整子代理工具语法、占位符和资源引用方式</td>
+</tr>
+</tbody></table>
+<h3 id="OpenSpec：让-design-md-约束代码分层"><a href="#OpenSpec：让-design-md-约束代码分层" class="headerlink" title="OpenSpec：让 design.md 约束代码分层"></a>OpenSpec：让 design.md 约束代码分层</h3><p>通用 OpenSpec 的 <code>design.md</code> 主要回答上下文、目标、技术决策、风险和迁移方案。这些内容能说明“为什么这样设计”，但还不足以约束代码必须落到哪个层级。</p>
+<p>定制版 <code>openspec-propose</code> 在标准设计之后追加了一套 DDD 详细设计，要求展示完整调用链：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">API</span><br><span class="line">  -&gt; Facade</span><br><span class="line">  -&gt; L0 AppService</span><br><span class="line">  -&gt; L1 DomainService</span><br><span class="line">  -&gt; L2 DomainAbility</span><br><span class="line">  -&gt; L3 Extension</span><br><span class="line">  -&gt; L4 Infrastructure</span><br></pre></td></tr></table></figure>
+
+<p>它还要求设计文档明确：</p>
+<ul>
+<li>AppService 负责流程编排，并通过 Context 传递一次业务处理的数据；</li>
+<li>DomainService 拆分业务阶段，DomainAbility 承载具体领域能力；</li>
+<li>Repo、RPC、MQ 等外部依赖收敛到 Infrastructure；</li>
+<li>类名遵循 <code>CmdAppService</code>、<code>QryAppService</code>、<code>DmService</code>、<code>Ability</code>、<code>Ops</code> 等约定；</li>
+<li>核心模块需要给出调用链、类结构、方法签名和分层统计。</li>
+</ul>
+<p>这样，<code>design.md</code> 就从普通架构说明变成了可以约束代码落位的实现蓝图。</p>
+<p>需要说明的是，L0-L4 不是所有 DDD 项目的通用标准，而是当前团队对 DDD 的具体落地方式。这里定制的是“项目的 DDD 架构规范”，换一个项目后，层级、注解和命名规则都可能需要替换。</p>
+<h3 id="scenario-thinking：先找到规则，再决定模型"><a href="#scenario-thinking：先找到规则，再决定模型" class="headerlink" title="scenario-thinking：先找到规则，再决定模型"></a>scenario-thinking：先找到规则，再决定模型</h3><p><code>scenario-thinking</code> 不是从 Superpowers 修改而来，而是独立编写的 Skill。它不会直接生成聚合、实体和值对象，而是先提供领域建模需要的业务材料：</p>
+<table>
+<thead>
+<tr>
+<th>推演结果</th>
+<th>对 DDD 设计的帮助</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>业务对象与关键标识</td>
+<td>形成统一领域术语，辅助判断聚合边界</td>
+</tr>
+<tr>
+<td>正常、边界和异常场景</td>
+<td>定义领域行为和验收条件</td>
+</tr>
+<tr>
+<td>多轮调用与状态变化</td>
+<td>识别状态机、幂等和生命周期规则</td>
+</tr>
+<tr>
+<td>数值公式与决策条件</td>
+<td>提炼业务不变量</td>
+</tr>
+<tr>
+<td>现有逻辑的零改动范围</td>
+<td>明确兼容边界</td>
+</tr>
+</tbody></table>
+<p>这里真正有价值的是“先推演，再建模”。如果直接让 AI 根据类名画领域模型，它很容易猜错边界；先用业务场景验证规则，再决定行为属于实体、领域服务还是应用编排，设计会可靠得多。</p>
+<h3 id="子代理开发：先审规格，再审质量"><a href="#子代理开发：先审规格，再审质量" class="headerlink" title="子代理开发：先审规格，再审质量"></a>子代理开发：先审规格，再审质量</h3><p>定制版 <code>subagent-driven-development</code> 把每个任务后的审查明确拆成两个阶段：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">实现代理完成任务并自检</span><br><span class="line">  -&gt; 规格审查：是否完整实现要求，有没有漏做或多做</span><br><span class="line">  -&gt; 代码质量审查：结构、测试和可维护性是否合格</span><br><span class="line">  -&gt; 任一阶段失败，修复后重新审查</span><br></pre></td></tr></table></figure>
+
+<p>这个顺序对 DDD 项目很重要。代码如果放错层、调用链与设计不一致，或者破坏了明确要求保持不变的旧逻辑，那么写得再整洁也没有意义。先回答“是不是按设计做的”，再回答“做得好不好”，两道门的职责更清楚。</p>
+<p>并不是所有文件差异都属于 DDD 改造。<code>requesting-code-review</code>、<code>test-driven-development</code> 和 <code>brainstorming</code> 中还有不少工具语法或版本变化。尤其是当前上游 <code>brainstorming/scripts</code> 已增加会话令牌、负载限制、断线恢复等能力，后续同步时应该保留这些改进，只重新应用真正需要的项目规则。</p>
 <h2 id="Harness-和模型选择的关系"><a href="#Harness-和模型选择的关系" class="headerlink" title="Harness 和模型选择的关系"></a>Harness 和模型选择的关系</h2><p>原始材料里花了不少篇幅比较不同模型在三种模式下的表现。博客里我不展开具体评分，因为分数会随模型版本、项目代码、提示词和测试样本变化。</p>
 <p>更值得保留的是这个结论：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">模型能力重要，但流程约束同样重要。</span><br></pre></td></tr></table></figure>
@@ -384,32 +521,26 @@
 <p>所以更合理的目标不是“让所有模型一样强”，而是：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">让日常需求尽量不依赖模型的临场发挥。</span><br></pre></td></tr></table></figure>
 
-<h2 id="写成-AI-Rules-时要注意什么"><a href="#写成-AI-Rules-时要注意什么" class="headerlink" title="写成 AI Rules 时要注意什么"></a>写成 AI Rules 时要注意什么</h2><p>如果要把 Harness 落成项目规则，我会保留四类内容。</p>
+<h2 id="把-Workflow-Orchestrator-接入-AI-Rules"><a href="#把-Workflow-Orchestrator-接入-AI-Rules" class="headerlink" title="把 Workflow Orchestrator 接入 AI Rules"></a>把 Workflow Orchestrator 接入 AI Rules</h2><p>如果要把 Harness 落成 <code>DEVELOPMENT_WORKFLOW_ORCHESTRATOR.md</code>，我会保留四类内容。</p>
 <p>第一，模式选择标准。收到需求后，先评估体量和类型，再说明为什么选择某个模式。</p>
-<p>第二，三条模式的执行流程。裸模型、scenario-thinking、OpenSpec&#x2F;Superpowers 要有清晰边界。</p>
-<p>第三，禁止事项。比如现有代码二开不能直接用裸模型，大需求不能跳过设计，<code>/opsx:apply</code> 不能直接等价于写代码。</p>
+<p>第二，三条模式的执行流程。裸模型、scenario-thinking、OpenSpec&#x2F;Superpowers 要有清晰边界，选定后必须锁定模式。</p>
+<p>第三，阶段门禁和禁止事项。比如现有代码二开不能直接用裸模型，大需求不能跳过设计，<code>/opsx:apply</code> 不能直接等价于写代码。</p>
 <p>第四，异常处理。比如推演覆盖不了场景怎么办，scenario-thinking 过程中发现是大需求怎么办，OpenSpec 设计不完整怎么办。</p>
-<p>规则不用写得越长越好。真正重要的是让 AI 在关键分叉点上不乱选。</p>
-<h2 id="这个系列最后串起来是什么"><a href="#这个系列最后串起来是什么" class="headerlink" title="这个系列最后串起来是什么"></a>这个系列最后串起来是什么</h2><p>到这里，三篇文章其实可以串成一条线。</p>
-<p>第一篇解决的是大需求怎么稳：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">OpenSpec 负责结构化产物；</span><br><span class="line">Superpowers 负责开发纪律。</span><br></pre></td></tr></table></figure>
-
-<p>第二篇解决的是二开需求怎么稳：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">scenario-thinking 负责把隐性场景推演出来。</span><br></pre></td></tr></table></figure>
-
-<p>第三篇解决的是入口怎么选：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Harness 负责根据需求体量和类型，把任务分到合适流程里。</span><br></pre></td></tr></table></figure>
+<p>规则不用为了完整而无限增长。真正重要的是让 AI 在关键分叉点上不乱选，并且让 OpenSpec 模式中的每个 Phase 都有清楚的完成标准。</p>
+<h2 id="开源与使用方式"><a href="#开源与使用方式" class="headerlink" title="开源与使用方式"></a>开源与使用方式</h2><p>目前，这套定制 Skill 已经开源到 <a target="_blank" rel="noopener" href="https://github.com/Moyu-Yunru/development-workflow-skill">Moyu-Yunru&#x2F;development-workflow-skill</a>。如果要在自己的项目中使用，可以先根据项目架构调整 DDD 分层、类命名和工具调用方式，再把 Workflow Orchestrator 放进项目级 AI Rules。</p>
+<p>回过头看，前两篇文章和这一篇的关系也很清楚：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">scenario-thinking 解决中小型需求和二开需求的业务推演；</span><br><span class="line">OpenSpec/Superpowers 解决大需求的设计、测试、实现和审查；</span><br><span class="line">Workflow Orchestrator 负责根据需求体量和类型，把任务分到正确模式。</span><br></pre></td></tr></table></figure>
 
 <p>如果只看单个工具，很容易陷入“这个 Skill 好不好用”的讨论。放到 Harness 视角下，问题会变成：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">这个需求需要多少约束？</span><br><span class="line">哪些风险应该在编码前暴露？</span><br><span class="line">哪些验证应该在交付前完成？</span><br></pre></td></tr></table></figure>
 
 <p>这才是 AI 编码真正该工程化的地方。</p>
-<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>Harness 可以理解成 AI 编码里的模式选择器。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>Harness 可以理解成 AI 编码里的模式选择器，而 Development Workflow Orchestrator 是这个选择器的具体实现。</p>
 <p>它不追求所有需求都走最完整的流程，也不放任所有需求都无约束推进。它做的是按风险分层：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">小需求：直接做，但不越界；</span><br><span class="line">二开和中型需求：先推演，再实现；</span><br><span class="line">大需求：先设计、再测试约束、再实现和审查。</span><br></pre></td></tr></table></figure>
 
-<p>前两篇文章分别讲了其中两条路线，这篇则把它们收束成一个判断框架。</p>
-<p>对我来说，Harness 最重要的价值不是省 token，也不是替换强模型，而是让 AI 编码从“模型单点能力”变成“模型 + 流程 + 验证”的组合能力。这样项目越复杂，流程的收益越明显。</p>
+<p>在这套结构中，编排器负责调度，定制 Skill 负责把场景、DDD 设计、测试和审查真正执行下去。</p>
+<p>对我来说，Harness 最重要的价值不是省 token，也不是替换强模型，而是让 AI 编码从“模型单点能力”变成“编排器调度 + Skill 能力 + 验证证据”的组合能力。这样项目越复杂，流程的收益越明显。</p>
 
       
     </div>
@@ -2318,7 +2449,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">32</span>
+        <span class="site-state-item-count">33</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
