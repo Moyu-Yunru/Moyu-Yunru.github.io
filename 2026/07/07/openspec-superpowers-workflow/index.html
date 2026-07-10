@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 8.1.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"moyu-yunru.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":"utterances","storage":true,"lazyload":false,"nav":null,"activeClass":"utterances"},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="AI 编码用多了以后，很容易遇到一个微妙的问题：它确实能写代码，但不一定总是按我们希望的方式写。 有时候需求还没澄清，它已经开始实现；有时候设计文档写得很完整，真正落代码时却只看任务清单；还有时候明明应该先写测试、先确认边界，它会为了“快点完成”直接跳到编码阶段。最后看起来是 AI 在提速，实际上 token 花了不少，人还要反复兜底。 这篇文章想整理一种更稳的做法：把 OpenSpec 和 Su">
+<meta property="og:type" content="article">
+<meta property="og:title" content="OpenSpec 和 Superpowers 怎么配合：给 AI 编码加一层流程护栏">
+<meta property="og:url" content="https://moyu-yunru.github.io/2026/07/07/openspec-superpowers-workflow/index.html">
+<meta property="og:site_name" content="Libra&#39;s notes">
+<meta property="og:description" content="AI 编码用多了以后，很容易遇到一个微妙的问题：它确实能写代码，但不一定总是按我们希望的方式写。 有时候需求还没澄清，它已经开始实现；有时候设计文档写得很完整，真正落代码时却只看任务清单；还有时候明明应该先写测试、先确认边界，它会为了“快点完成”直接跳到编码阶段。最后看起来是 AI 在提速，实际上 token 花了不少，人还要反复兜底。 这篇文章想整理一种更稳的做法：把 OpenSpec 和 Su">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/openspec-superpowers-workflow/overall-brain.png">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/openspec-superpowers-workflow/openspec-artifacts.png">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/openspec-superpowers-workflow/design-check.png">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/openspec-superpowers-workflow/tdd-constraint.png">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/openspec-superpowers-workflow/implementation-status.png">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/openspec-superpowers-workflow/review-summary.png">
+<meta property="article:published_time" content="2026-07-07T15:11:18.000Z">
+<meta property="article:modified_time" content="2026-07-10T02:13:39.040Z">
+<meta property="article:author" content="Libra">
+<meta property="article:tag" content="AI辅助编程">
+<meta property="article:tag" content="Agent Skill">
+<meta property="article:tag" content="OpenSpec">
+<meta property="article:tag" content="Superpowers">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://moyu-yunru.github.io/images/openspec-superpowers-workflow/overall-brain.png">
+
+<link rel="canonical" href="https://moyu-yunru.github.io/2026/07/07/openspec-superpowers-workflow/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>OpenSpec 和 Superpowers 怎么配合：给 AI 编码加一层流程护栏 | Libra's notes</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Libra's notes</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">A place to record my thoughts</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-文章">
+
+    <a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>文章</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+  <a href="https://github.com/Moyu-Yunru/Moyu-Yunru.github.io" class="github-corner" title="MoyuYunru GitHub" aria-label="MoyuYunru GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/07/07/openspec-superpowers-workflow/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          OpenSpec 和 Superpowers 怎么配合：给 AI 编码加一层流程护栏
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2026-07-07 23:11:18" itemprop="dateCreated datePublished" datetime="2026-07-07T23:11:18+08:00">2026-07-07</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-07-10 10:13:39" itemprop="dateModified" datetime="2026-07-10T10:13:39+08:00">2026-07-10</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>AI 编码用多了以后，很容易遇到一个微妙的问题：它确实能写代码，但不一定总是按我们希望的方式写。</p>
+<p>有时候需求还没澄清，它已经开始实现；有时候设计文档写得很完整，真正落代码时却只看任务清单；还有时候明明应该先写测试、先确认边界，它会为了“快点完成”直接跳到编码阶段。最后看起来是 AI 在提速，实际上 token 花了不少，人还要反复兜底。</p>
+<p>这篇文章想整理一种更稳的做法：把 <strong>OpenSpec</strong> 和 <strong>Superpowers</strong> 组合起来。OpenSpec 负责把需求变成结构化的设计产物，Superpowers 负责约束 AI 的工作纪律。两者合在一起，本质上是在 AI 和代码之间加了一层“流程护栏”。</p>
+<h2 id="为什么不是只用一个工具"><a href="#为什么不是只用一个工具" class="headerlink" title="为什么不是只用一个工具"></a>为什么不是只用一个工具</h2><p>OpenSpec 和 Superpowers 看起来有不少重叠：它们都会涉及需求分析、设计、任务拆解、执行和检查。但如果拆开看，两者的优势并不一样。</p>
+<p>OpenSpec 更像一个规范驱动开发框架。它擅长把一段需求拆成几个明确的 Markdown 产物：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">proposal.md：为什么做、做什么、影响范围是什么</span><br><span class="line">design.md：如何实现、架构怎么选、接口和数据怎么设计</span><br><span class="line">tasks.md：实现时分成哪些可执行任务</span><br><span class="line">spec.md：能力变化和验收场景</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，OpenSpec 的强项是让 AI 先把“需求意图”落到纸面上。它帮我们把模糊的一句话变成可以审查、可以讨论、可以追踪的设计资料。</p>
+<p>Superpowers 的侧重点则不同。它更像一套开发纪律：什么时候要先检查技能，什么时候要头脑风暴，什么时候必须先写测试，什么时候要做代码审查，什么时候不能直接相信审查意见。它关心的不是单个设计文档长什么样，而是 AI 在整个开发过程中有没有遵守专业工程流程。</p>
+<p>所以我更倾向于这样分工：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">OpenSpec：负责生成需求、设计、任务、规范这些“交付物”</span><br><span class="line">Superpowers：负责约束澄清、验证、测试、审查这些“过程”</span><br></pre></td></tr></table></figure>
+
+<p>如果只用 OpenSpec，风险是产物有了，但执行阶段仍可能发散。如果只用 Superpowers，流程很严谨，但需求到设计的结构化产物可能不够统一。把两者组合起来，才比较接近“先有设计，再按纪律交付”。</p>
+<h2 id="组合思路：做一个调度大脑"><a href="#组合思路：做一个调度大脑" class="headerlink" title="组合思路：做一个调度大脑"></a>组合思路：做一个调度大脑</h2><p>原材料里把这层调度规则叫“大脑”，这个说法很形象。它本质上就是一份结构化的 Markdown 规则，写清楚不同阶段应该调用哪类 Skill，以及每个阶段完成以后才能进入下一步。</p>
+<img src="../../../../images/openspec-superpowers-workflow/overall-brain.png" alt="OpenSpec 与 Superpowers 的整体组合思路">
+
+<p>这层“大脑”不需要把所有 Skill 都塞进流程。恰恰相反，越是想用流程节省 token，越不能什么都调用。比较实用的组合可以压缩成五个阶段：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Phase 1：OpenSpec 生成设计产物</span><br><span class="line">Phase 2：Superpowers 检查设计完整性和关键问题</span><br><span class="line">Phase 3：Superpowers 引入 TDD 或子代理约束</span><br><span class="line">Phase 4：OpenSpec 按设计和任务执行变更</span><br><span class="line">Phase 5：Superpowers 做增量代码审查和反馈处理</span><br></pre></td></tr></table></figure>
+
+<p>这里最关键的不是命令名称，而是阶段边界。比如 <code>/opsx:apply</code> 不应该被理解成“直接开始写代码”，而应该被理解成“进入完整实现流程”：先检查设计，再建立测试约束，再执行代码变更，最后审查。</p>
+<h2 id="第一阶段：先让-OpenSpec-产出可审查资料"><a href="#第一阶段：先让-OpenSpec-产出可审查资料" class="headerlink" title="第一阶段：先让 OpenSpec 产出可审查资料"></a>第一阶段：先让 OpenSpec 产出可审查资料</h2><p>一个好的 AI 开发流程，不应该从“帮我实现这个需求”直接跳到代码。更稳的起点是先让 OpenSpec 生成需求产物。</p>
+<p>例如可以把提示词写成这样：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">/opsx:propose 按需求文档完成后端接口调整。默认使用中文。</span><br><span class="line">当前只关注后端接口，前端内容可以忽略。</span><br><span class="line">请先生成 proposal、design、tasks 和 spec，不要直接修改代码。</span><br></pre></td></tr></table></figure>
+
+<p>这一步的目标不是让 AI 表演“已经理解了”，而是把它的理解暴露出来。只要有了 <code>proposal.md</code>、<code>design.md</code>、<code>tasks.md</code>、<code>spec.md</code>，用户就可以检查几个关键问题：</p>
+<ul>
+<li>需求范围有没有扩大；</li>
+<li>设计是否符合当前项目架构；</li>
+<li>任务拆分是否能逐项验证；</li>
+<li>是否有未确认的问题被 AI 默认补全；</li>
+<li>生成的 spec 是否真的能作为验收标准。</li>
+</ul>
+<img src="../../../../images/openspec-superpowers-workflow/openspec-artifacts.png" alt="OpenSpec 生成的设计产物目录">
+
+<p>这一步看似增加了成本，实际是在减少后续返工。因为 AI 最容易犯错的地方，往往不是语法，而是前提假设：它以为某个字段存在，以为某个接口可以改，以为某个边界不重要。设计产物就是用来提前暴露这些假设的。</p>
+<h2 id="第二阶段：用-Superpowers-检查设计，不急着实现"><a href="#第二阶段：用-Superpowers-检查设计，不急着实现" class="headerlink" title="第二阶段：用 Superpowers 检查设计，不急着实现"></a>第二阶段：用 Superpowers 检查设计，不急着实现</h2><p>OpenSpec 产物生成以后，不要立刻进入 <code>apply</code> 写代码。更好的做法是让 Superpowers 的 brainstorming 或类似流程介入，专门检查设计资料是否足够落地。</p>
+<p>这一步可以让 AI 重点检查三类问题：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">完整性：proposal、design、tasks、spec 是否都存在，内容是否互相对应</span><br><span class="line">可执行性：tasks 是否足够小，每个任务是否有明确输入输出</span><br><span class="line">风险点：哪些技术问题还没有证据，哪些业务边界还没确认</span><br></pre></td></tr></table></figure>
+
+<img src="../../../../images/openspec-superpowers-workflow/design-check.png" alt="Superpowers 对 OpenSpec 设计产物做完整性检查">
+
+<p>我觉得这一步是两套工具组合后最有价值的地方。OpenSpec 负责“生成设计”，Superpowers 负责“质疑设计”。这会把 AI 从“顺着自己刚写的文档继续往下编”拉回来，让它重新站在审查者视角看问题。</p>
+<p>如果设计里出现了未确认项，流程应该允许 AI 停下来问问题，而不是强行继续。比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">这个接口是否需要兼容旧字段？</span><br><span class="line">目标表中的字段名是否已经在真实数据库中验证？</span><br><span class="line">新增返回值为空时，前端是否接受 null？</span><br><span class="line">当前需求是否允许修改公共 DTO？</span><br></pre></td></tr></table></figure>
+
+<p>这些问题如果在编码前问清楚，可能只花几分钟；如果等代码写完再发现，就是一轮返工。</p>
+<h2 id="第三阶段：把-TDD-放在实现前面"><a href="#第三阶段：把-TDD-放在实现前面" class="headerlink" title="第三阶段：把 TDD 放在实现前面"></a>第三阶段：把 TDD 放在实现前面</h2><p>很多 AI 编码流程里，测试是最后才补的。这样的问题是：AI 已经写完实现，再让它补测试，它会天然倾向于证明自己写得对，而不是暴露实现的问题。</p>
+<p>Superpowers 的 TDD 约束可以把顺序倒过来：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">先根据 design.md 和 spec.md 写测试</span><br><span class="line">运行测试，确认失败原因是功能缺失</span><br><span class="line">再让实现阶段只写让测试通过的最小代码</span><br><span class="line">每完成一个任务，都运行对应测试</span><br></pre></td></tr></table></figure>
+
+<img src="../../../../images/openspec-superpowers-workflow/tdd-constraint.png" alt="TDD 阶段对实现前置约束">
+
+<p>在真实项目里，不一定所有需求都能做到理想化 TDD。老项目可能测试框架不完整，外部依赖很重，甚至很多接口没有现成测试样例。但即便如此，也应该保留“先定义可验证行为”的思路。最低限度也要写清楚：</p>
+<ul>
+<li>这次变更影响哪些输入输出；</li>
+<li>哪些场景必须覆盖；</li>
+<li>哪些旧行为不能破坏；</li>
+<li>运行什么命令能证明变更有效。</li>
+</ul>
+<p>对于任务比较大的需求，还可以让子代理按任务拆分工作：一个任务一个上下文，完成后再做两阶段审查。这样可以降低长上下文里互相污染的概率，也能减少“前面任务还没验收，后面任务已经堆上来”的失控感。</p>
+<h2 id="第四阶段：实现时必须回到设计"><a href="#第四阶段：实现时必须回到设计" class="headerlink" title="第四阶段：实现时必须回到设计"></a>第四阶段：实现时必须回到设计</h2><p>有一个很值得注意的改造点：OpenSpec 的实现 Skill 如果只参考 <code>tasks.md</code>，可能会忽略前面更完整的 <code>design.md</code>。这会导致任务做完了，但架构意图丢了。</p>
+<p>所以实现阶段应该明确要求 AI 同时读取：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">design.md：作为架构和接口设计蓝图</span><br><span class="line">tasks.md：作为执行顺序和工作清单</span><br><span class="line">spec.md：作为行为验收标准</span><br><span class="line">测试结果：作为代码必须满足的约束</span><br></pre></td></tr></table></figure>
+
+<img src="../../../../images/openspec-superpowers-workflow/implementation-status.png" alt="实现阶段的状态回报">
+
+<p>这里的关键原则是：<strong>tasks 只能告诉 AI 做什么，design 才能告诉 AI 为什么这样做。</strong></p>
+<p>如果只盯着任务清单，AI 很容易做出局部正确、整体不协调的代码。例如任务里写“新增字段”，它可能只在返回对象里加字段，却没有沿着 Mapper、Service、DTO、文档和测试一路检查。设计文档的价值，就是把调用链路、数据来源和边界条件固定下来。</p>
+<h2 id="第五阶段：代码审查不要变成礼貌性点头"><a href="#第五阶段：代码审查不要变成礼貌性点头" class="headerlink" title="第五阶段：代码审查不要变成礼貌性点头"></a>第五阶段：代码审查不要变成礼貌性点头</h2><p>实现完成后，最后一道门禁是代码审查。这里 Superpowers 里 <code>requesting-code-review</code> 和 <code>receiving-code-review</code> 的组合很有用。</p>
+<p>发起审查时，AI 不应该只说“帮我看看代码”，而应该把上下文说清楚：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">本次需求是什么</span><br><span class="line">参考了哪些 OpenSpec 产物</span><br><span class="line">修改了哪些文件</span><br><span class="line">哪些测试已经运行</span><br><span class="line">当前还有哪些疑虑</span><br></pre></td></tr></table></figure>
+
+<p>审查反馈回来以后，也不能看到建议就马上改。更稳的处理顺序是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">先完整阅读反馈</span><br><span class="line">再对照代码验证问题是否真实存在</span><br><span class="line">然后判断建议是否符合当前项目</span><br><span class="line">最后再决定修复、记录或有理有据地反驳</span><br></pre></td></tr></table></figure>
+
+<img src="../../../../images/openspec-superpowers-workflow/review-summary.png" alt="增量代码审查结果摘要">
+
+<p>这一点对 AI 尤其重要。因为 AI 很容易“表演性同意”：别人说得像是问题，它就立刻说“你说得对”。但代码审查不是情绪互动，而是技术判断。审查意见需要验证，修复动作也需要测试兜底。</p>
+<h2 id="实战案例"><a href="#实战案例" class="headerlink" title="实战案例"></a>实战案例</h2><p>假设我们要给一个后端查询接口补充一个返回字段。</p>
+<p>第一步，让 OpenSpec 只生成设计，不写代码：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">/opsx:propose 为订单详情查询接口新增 deliveryStatus 返回字段。</span><br><span class="line">字段来源于 order_delivery 表，通过 order_id 关联。</span><br><span class="line">要求保持旧接口兼容，不修改入参，不做前端改造。</span><br><span class="line">请先生成 proposal、design、tasks、spec。</span><br></pre></td></tr></table></figure>
+
+<p>第二步，人工检查 OpenSpec 产物。重点不是逐字润色，而是确认几个硬事实：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">字段来源是否明确</span><br><span class="line">关联关系是否可信</span><br><span class="line">空值如何处理</span><br><span class="line">是否影响已有调用方</span><br><span class="line">是否需要数据库变更</span><br><span class="line">测试场景是否覆盖正常、缺失关联、空结果</span><br></pre></td></tr></table></figure>
+
+<p>第三步，进入 apply，但不要直接实现：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">/opsx:apply 先检查 OpenSpec 产物完整性。</span><br><span class="line">如果存在未确认的技术问题，请先列出问题，不要直接写代码。</span><br></pre></td></tr></table></figure>
+
+<p>第四步，根据 AI 提出的问题补充上下文。比如确认字段名、表结构、空值策略、是否需要修改 API 文档。只有这些问题关掉以后，再进入 TDD 或最小验证设计。</p>
+<p>第五步，选择实现模式。小需求可以一次完整实现；大需求可以分阶段，比如先完成 DTO 和查询链路，再补测试和文档。这里不要为了“流程完整”而机械跑所有 Skill，流程是为了降低风险，不是为了制造仪式感。</p>
+<p>第六步，完成后做增量代码审查。审查范围只围绕本次变更，不扩散到无关重构。审查发现的问题要逐条验证，修复后重新跑对应测试。</p>
+<p>这样改写以后，实战部分就不再依赖某个具体项目、某个具体截图或某次模型实验，而是变成任何后端需求都能复用的流程模板。</p>
+<h2 id="组合这两套工具时要注意什么"><a href="#组合这两套工具时要注意什么" class="headerlink" title="组合这两套工具时要注意什么"></a>组合这两套工具时要注意什么</h2><p>第一，不要把所有 Skill 都接进来。Skill 越多，流程越重，token 消耗也越高。真正有价值的是按项目风险选择关键门禁：设计生成、设计检查、测试约束、增量实现、代码审查。</p>
+<p>第二，OpenSpec 的产物要按项目口味改造。比如项目如果强调 DDD，就应该要求 <code>design.md</code> 写清楚领域对象、应用服务、接口调用链路和出入参。如果项目更偏传统三层架构，就不要硬套复杂设计。</p>
+<p>第三，实现阶段必须引用设计文档。只看 <code>tasks.md</code> 会让 AI 变成任务执行器，看起来快，但容易丢掉架构约束。</p>
+<p>第四，Superpowers 的价值不在于“多问问题”，而在于阻止 AI 在证据不足时继续前进。好的流程应该允许 AI 说“这里还不确定，需要确认”，而不是永远假装能做。</p>
+<p>第五，不要把模型选择当成流程本身。模型能力当然重要，但稳定交付更依赖上下文质量、流程约束和验证手段。一个强模型如果没有流程，也可能写得很发散；一个普通模型如果被设计文档和测试约束住，反而能稳定完成边界清楚的任务。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>OpenSpec 和 Superpowers 的组合，可以理解成一句话：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">OpenSpec 负责把需求写清楚，Superpowers 负责让 AI 按清楚的需求做事。</span><br></pre></td></tr></table></figure>
+
+<p>这套流程最适合的场景，不是随手改一个变量名，而是那些“需求不算巨大，但有真实业务边界和代码风险”的日常开发任务。它会牺牲一点启动速度，但换来更清晰的设计、更少的发散、更可追踪的实现过程。</p>
+<p>对我来说，这也是 AI 编码从“会写代码”走向“能协作交付”的关键一步：不要只让 AI 输出结果，要让它暴露推理、接受检查、遵守流程，并且在每个关键阶段留下可验证的证据。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Agent-Skill/" rel="tag"># Agent Skill</a>
+              <a href="/tags/AI%E8%BE%85%E5%8A%A9%E7%BC%96%E7%A8%8B/" rel="tag"># AI辅助编程</a>
+              <a href="/tags/OpenSpec/" rel="tag"># OpenSpec</a>
+              <a href="/tags/Superpowers/" rel="tag"># Superpowers</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2026/06/18/ai-assisted-sql-n-plus-one-optimization/" rel="prev" title="AI 写 SQL 不能只问“怎么查”：一次 N+1 查询优化复盘">
+      <i class="fa fa-chevron-left"></i> AI 写 SQL 不能只问“怎么查”：一次 N+1 查询优化复盘
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2026/07/07/scenario-thinking-workflow/" rel="next" title="补充篇：用 scenario-thinking 把二次开发先推演清楚">
+      补充篇：用 scenario-thinking 把二次开发先推演清楚 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+    <div class="comments" id="utterances-container"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%B8%8D%E6%98%AF%E5%8F%AA%E7%94%A8%E4%B8%80%E4%B8%AA%E5%B7%A5%E5%85%B7"><span class="nav-number">1.</span> <span class="nav-text">为什么不是只用一个工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%84%E5%90%88%E6%80%9D%E8%B7%AF%EF%BC%9A%E5%81%9A%E4%B8%80%E4%B8%AA%E8%B0%83%E5%BA%A6%E5%A4%A7%E8%84%91"><span class="nav-number">2.</span> <span class="nav-text">组合思路：做一个调度大脑</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E9%98%B6%E6%AE%B5%EF%BC%9A%E5%85%88%E8%AE%A9-OpenSpec-%E4%BA%A7%E5%87%BA%E5%8F%AF%E5%AE%A1%E6%9F%A5%E8%B5%84%E6%96%99"><span class="nav-number">3.</span> <span class="nav-text">第一阶段：先让 OpenSpec 产出可审查资料</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E9%98%B6%E6%AE%B5%EF%BC%9A%E7%94%A8-Superpowers-%E6%A3%80%E6%9F%A5%E8%AE%BE%E8%AE%A1%EF%BC%8C%E4%B8%8D%E6%80%A5%E7%9D%80%E5%AE%9E%E7%8E%B0"><span class="nav-number">4.</span> <span class="nav-text">第二阶段：用 Superpowers 检查设计，不急着实现</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E9%98%B6%E6%AE%B5%EF%BC%9A%E6%8A%8A-TDD-%E6%94%BE%E5%9C%A8%E5%AE%9E%E7%8E%B0%E5%89%8D%E9%9D%A2"><span class="nav-number">5.</span> <span class="nav-text">第三阶段：把 TDD 放在实现前面</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E5%9B%9B%E9%98%B6%E6%AE%B5%EF%BC%9A%E5%AE%9E%E7%8E%B0%E6%97%B6%E5%BF%85%E9%A1%BB%E5%9B%9E%E5%88%B0%E8%AE%BE%E8%AE%A1"><span class="nav-number">6.</span> <span class="nav-text">第四阶段：实现时必须回到设计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%94%E9%98%B6%E6%AE%B5%EF%BC%9A%E4%BB%A3%E7%A0%81%E5%AE%A1%E6%9F%A5%E4%B8%8D%E8%A6%81%E5%8F%98%E6%88%90%E7%A4%BC%E8%B2%8C%E6%80%A7%E7%82%B9%E5%A4%B4"><span class="nav-number">7.</span> <span class="nav-text">第五阶段：代码审查不要变成礼貌性点头</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E6%88%98%E6%A1%88%E4%BE%8B"><span class="nav-number">8.</span> <span class="nav-text">实战案例</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%84%E5%90%88%E8%BF%99%E4%B8%A4%E5%A5%97%E5%B7%A5%E5%85%B7%E6%97%B6%E8%A6%81%E6%B3%A8%E6%84%8F%E4%BB%80%E4%B9%88"><span class="nav-number">9.</span> <span class="nav-text">组合这两套工具时要注意什么</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">10.</span> <span class="nav-text">总结</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Libra"
+      src="/images/IMG_1578.jpeg">
+  <p class="site-author-name" itemprop="name">Libra</p>
+  <div class="site-description" itemprop="description">记录技术、项目与思考</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">14</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">32</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Moyu-Yunru" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Moyu-Yunru" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Libra</span>
+</div><div class="libra-footer-left">
+  <span>由 <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> 驱动</span>
+  <span>主题 <a href="https://pisces.theme-next.org/" rel="noopener" target="_blank">NexT.Pisces</a></span>
+</div>
+
+<div class="libra-footer-extra">
+  <span>共撰写了 14 篇文章</span>
+  <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<script>
+NexT.utils.loadComments(document.querySelector('#utterances-container'), () => {
+  var container = document.querySelector('#utterances-container');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  var script = document.createElement('script');
+  script.src = 'https://utteranc.es/client.js';
+  script.setAttribute('repo', "Moyu-Yunru/blog-comments");
+  script.setAttribute('issue-term', "title");
+  script.setAttribute('theme', "github-light");
+  script.crossOrigin = 'anonymous';
+  script.async = true;
+
+  container.appendChild(script);
+});
+</script>
+<script>
+(function() {
+  var phrases = [
+    '随心所欲地享受每一天(￣︶￣*))',
+    '学习 LLM，也拆解 Agent 的工作方式',
+    '把 AI 工具链放进真实工程场景',
+    '记录问题的答案，也记录学习的路径',
+    '如果喜欢，建议给个支持( •̀ ω •́ )✧',
+    '喜欢的话，留个言好嘛(oﾟvﾟ)ノ',
+    '你有建议？反馈作者(●^◡^●)',
+    '我们总是走得太急，却忘了当初为什么出发——纪伯伦',
+    '火车是朝前开的，去哪儿并不重要，关键在于窗外的风景——吕子乔',
+    '世界上只有一种真正的英雄主义，那就是认清生活的真相后依然热爱生活——罗曼·罗兰',
+  ];
+
+  function initTypewriter() {
+    var target = document.querySelector('[data-libra-typewriter]');
+    if (!target) return;
+
+    if (window.__libraTypewriterTimer) {
+      clearTimeout(window.__libraTypewriterTimer);
+    }
+
+    var phraseIndex = 0;
+    var charIndex = 0;
+    var deleting = false;
+
+    function tick() {
+      var current = phrases[phraseIndex];
+      target.textContent = current.slice(0, charIndex);
+
+      if (!deleting && charIndex < current.length) {
+        charIndex += 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 88);
+        return;
+      }
+
+      if (!deleting && charIndex === current.length) {
+        deleting = true;
+        window.__libraTypewriterTimer = setTimeout(tick, 1600);
+        return;
+      }
+
+      if (deleting && charIndex > 0) {
+        charIndex -= 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 42);
+        return;
+      }
+
+      deleting = false;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      window.__libraTypewriterTimer = setTimeout(tick, 420);
+    }
+
+    tick();
+  }
+
+  function initRuntime() {
+    var runtime = document.getElementById('libra-site-runtime');
+    if (!runtime) return;
+
+    var start = new Date(runtime.getAttribute('data-start')).getTime();
+    if (!start) return;
+
+    function renderRuntime() {
+      var diff = Math.max(0, Date.now() - start);
+      var seconds = Math.floor(diff / 1000);
+      var days = Math.floor(seconds / 86400);
+      seconds %= 86400;
+      var hours = Math.floor(seconds / 3600);
+      seconds %= 3600;
+      var minutes = Math.floor(seconds / 60);
+      seconds %= 60;
+      runtime.textContent = days + ' 天 ' + hours + ' 小时 ' + minutes + ' 分钟 ' + seconds + ' 秒';
+    }
+
+    renderRuntime();
+    if (window.__libraRuntimeTimer) {
+      clearInterval(window.__libraRuntimeTimer);
+    }
+    window.__libraRuntimeTimer = setInterval(renderRuntime, 1000);
+  }
+
+  function initLibraHome() {
+    initTypewriter();
+    initRuntime();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLibraHome);
+  } else {
+    initLibraHome();
+  }
+  document.addEventListener('pjax:success', initLibraHome);
+})();
+</script>
+
+</body>
+</html>

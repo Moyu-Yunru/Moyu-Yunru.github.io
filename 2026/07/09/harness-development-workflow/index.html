@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 8.1.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"moyu-yunru.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":"utterances","storage":true,"lazyload":false,"nav":null,"activeClass":"utterances"},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="前两篇文章分别讲了两件事。 第一篇是 OpenSpec 和 Superpowers 怎么配合：当需求比较大时，先用 OpenSpec 生成设计、任务和规范，再用 Superpowers 约束设计验证、TDD、实现和代码审查。 第二篇是 scenario-thinking 怎么用于二次开发：当需求没有大到需要完整流程，但业务边界又不能靠 AI 自己猜时，先做场景穷举和数值推演，再按推演文档实现。 这">
+<meta property="og:type" content="article">
+<meta property="og:title" content="从 OpenSpec 到 Harness：给 AI 编码做一个模式选择器">
+<meta property="og:url" content="https://moyu-yunru.github.io/2026/07/09/harness-development-workflow/index.html">
+<meta property="og:site_name" content="Libra&#39;s notes">
+<meta property="og:description" content="前两篇文章分别讲了两件事。 第一篇是 OpenSpec 和 Superpowers 怎么配合：当需求比较大时，先用 OpenSpec 生成设计、任务和规范，再用 Superpowers 约束设计验证、TDD、实现和代码审查。 第二篇是 scenario-thinking 怎么用于二次开发：当需求没有大到需要完整流程，但业务边界又不能靠 AI 自己猜时，先做场景穷举和数值推演，再按推演文档实现。 这">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/harness-development-workflow/harness-flow.png">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/harness-development-workflow/small-requirement-mode.png">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/harness-development-workflow/secondary-development-mode.png">
+<meta property="og:image" content="https://moyu-yunru.github.io/images/harness-development-workflow/large-requirement-mode.png">
+<meta property="article:published_time" content="2026-07-09T15:28:41.000Z">
+<meta property="article:modified_time" content="2026-07-09T15:30:56.690Z">
+<meta property="article:author" content="Libra">
+<meta property="article:tag" content="AI辅助编程">
+<meta property="article:tag" content="Agent Skill">
+<meta property="article:tag" content="Harness">
+<meta property="article:tag" content="OpenSpec">
+<meta property="article:tag" content="Scenario Thinking">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://moyu-yunru.github.io/images/harness-development-workflow/harness-flow.png">
+
+<link rel="canonical" href="https://moyu-yunru.github.io/2026/07/09/harness-development-workflow/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>从 OpenSpec 到 Harness：给 AI 编码做一个模式选择器 | Libra's notes</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Libra's notes</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">A place to record my thoughts</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-文章">
+
+    <a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>文章</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+  <a href="https://github.com/Moyu-Yunru/Moyu-Yunru.github.io" class="github-corner" title="MoyuYunru GitHub" aria-label="MoyuYunru GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/07/09/harness-development-workflow/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          从 OpenSpec 到 Harness：给 AI 编码做一个模式选择器
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2026-07-09 23:28:41 / 修改时间：23:30:56" itemprop="dateCreated datePublished" datetime="2026-07-09T23:28:41+08:00">2026-07-09</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>前两篇文章分别讲了两件事。</p>
+<p>第一篇是 <a href="/2026/07/07/openspec-superpowers-workflow/">OpenSpec 和 Superpowers 怎么配合</a>：当需求比较大时，先用 OpenSpec 生成设计、任务和规范，再用 Superpowers 约束设计验证、TDD、实现和代码审查。</p>
+<p>第二篇是 <a href="/2026/07/07/scenario-thinking-workflow/">scenario-thinking 怎么用于二次开发</a>：当需求没有大到需要完整流程，但业务边界又不能靠 AI 自己猜时，先做场景穷举和数值推演，再按推演文档实现。</p>
+<p>这篇可以看作前两篇的总结：<strong>我们不应该只问“用哪个模型”，而应该先问“这个需求该走哪种开发模式”。</strong></p>
+<p>这就是 Harness 的位置。</p>
+<h2 id="Harness-不是一个具体工具"><a href="#Harness-不是一个具体工具" class="headerlink" title="Harness 不是一个具体工具"></a>Harness 不是一个具体工具</h2><p>Harness 直译有“马具、缰绳”的意思。放到 AI 编码里，它不是某一个固定插件，也不是某一个模型能力，而是一类工程化约束手段。</p>
+<p>我更愿意这样理解它：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">模型负责生成能力；</span><br><span class="line">Harness 负责约束生成路径。</span><br></pre></td></tr></table></figure>
+
+<p>用户给 AI 的原始输入通常很短，比如“帮我改一下这个接口”“新增一个工具类”“按需求文档完成这个功能”。这类输入对人来说可以继续追问，对模型来说却很容易变成发散空间。</p>
+<p>Harness 要做的事情，就是把模糊目标变成明确过程：</p>
+<ul>
+<li>先判断需求体量；</li>
+<li>再判断是全新需求还是现有代码二开；</li>
+<li>然后选择裸模型、scenario-thinking 或 OpenSpec&#x2F;Superpowers；</li>
+<li>最后把 AI 约束在选定模式里完成交付。</li>
+</ul>
+<p>所以 Harness 的价值，不是让模型突然“变聪明”，而是减少模型需要临场猜测的部分。</p>
+<h2 id="为什么它能缩小模型差距"><a href="#为什么它能缩小模型差距" class="headerlink" title="为什么它能缩小模型差距"></a>为什么它能缩小模型差距</h2><p>不同模型之间的差距，很多时候不是体现在“会不会写一个 if”，而是体现在更前面的判断上：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">能不能从模糊需求里推断真实意图；</span><br><span class="line">能不能找到正确的业务抽象；</span><br><span class="line">能不能稳定完成多步推理；</span><br><span class="line">能不能在长上下文里不偏航。</span><br></pre></td></tr></table></figure>
+
+<p>如果用户只说“我要吃饭”，中间有太多信息需要补：什么时候、在哪、和谁、预算多少、忌口是什么。模型越强，越可能补得合理；模型弱一点，就更容易发散。</p>
+<p>但如果输入变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">今晚 7 点，两个人，在公司食堂二楼吃饭，预算 50 元以内，不吃辣。</span><br></pre></td></tr></table></figure>
+
+<p>模型之间的差距就会缩小。因为很多需要推断的东西，已经被外部过程补足了。</p>
+<p>AI 编码也是一样。Harness 的本质是把“请你猜”改成“按这个流程判断、按这个文档实现、按这些场景验证”。</p>
+<p>它主要降低三类风险：</p>
+<ul>
+<li>意图推断风险：通过需求体量和类型判断，减少模型自己猜模式；</li>
+<li>推理发散风险：通过场景推演、设计文档和任务清单，把推理步骤外化；</li>
+<li>实现越界风险：通过模式隔离和完成标准，限制 AI 随意扩展范围。</li>
+</ul>
+<h2 id="三条开发路线"><a href="#三条开发路线" class="headerlink" title="三条开发路线"></a>三条开发路线</h2><p>Harness 的核心，是把需求分到三条路线里。</p>
+<img src="../../../../images/harness-development-workflow/harness-flow.png" alt="Harness 开发设计流程图">
+
+<p>第一条是裸模型模式。</p>
+<p>它适合非常小的 0 到 1 需求：新增一个工具函数、补一个简单转换方法、写一个不涉及复杂业务分支的小能力。这类需求如果也强行走完整设计流程，反而会把简单事情做重。</p>
+<p>第二条是 <code>scenario-thinking</code> 模式。</p>
+<p>它适合中小体量需求，尤其适合现有代码二开。原因很简单：二开最怕误伤旧逻辑。看起来只是新增一个标识、放开一个校验，背后可能会影响 null、false、旧调用方、特殊类型、混合明细、多轮调用等一串场景。</p>
+<p>第三条是 OpenSpec&#x2F;Superpowers 模式。</p>
+<p>它适合大体量需求：改动跨多个模块，涉及多条主流程和异常流，需要明确设计、任务、测试约束和代码审查。这时完整流程虽然重，但它能把风险压住。</p>
+<p>可以粗略记成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">小而新的需求：裸模型</span><br><span class="line">中小型二开或边界多的需求：scenario-thinking</span><br><span class="line">大体量需求：OpenSpec/Superpowers</span><br></pre></td></tr></table></figure>
+
+<h2 id="先判断体量，再判断类型"><a href="#先判断体量，再判断类型" class="headerlink" title="先判断体量，再判断类型"></a>先判断体量，再判断类型</h2><p>Harness 的第一步不是调用 Skill，而是做模式选择。</p>
+<p>需求体量可以按四个维度判断：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>小</th>
+<th>中</th>
+<th>大</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>改动文件数</td>
+<td>3 个以内</td>
+<td>3 到 8 个</td>
+<td>超过 8 个</td>
+</tr>
+<tr>
+<td>业务场景</td>
+<td>单一无分支</td>
+<td>2 到 5 个场景</td>
+<td>多条主流程和异常流</td>
+</tr>
+<tr>
+<td>模块依赖</td>
+<td>基本无跨模块</td>
+<td>1 到 2 个模块</td>
+<td>跨多个模块或服务</td>
+</tr>
+<tr>
+<td>预估时间</td>
+<td>30 分钟以内</td>
+<td>30 分钟到 2 小时</td>
+<td>超过 2 小时</td>
+</tr>
+</tbody></table>
+<p>这里有一个保守原则：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">拿不准，就往大评。</span><br></pre></td></tr></table></figure>
+
+<p>这不是为了显得流程严谨，而是因为低估需求体量的代价很高。一个实际需要设计和测试约束的需求，如果误判成“随手一改”，后面通常会付出更多返工成本。</p>
+<p>判断完体量，还要判断需求类型：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">0 到 1 需求：现有代码里没有对应实现，是新增能力。</span><br><span class="line">现有代码二开：在已有接口、方法、流程上修改或扩展。</span><br></pre></td></tr></table></figure>
+
+<p>二者最大的区别是：0 到 1 更关注“怎么建”，二开更关注“旧行为不能坏”。</p>
+<h2 id="模式选择矩阵"><a href="#模式选择矩阵" class="headerlink" title="模式选择矩阵"></a>模式选择矩阵</h2><p>把体量和类型合起来，可以得到一个简单矩阵：</p>
+<table>
+<thead>
+<tr>
+<th>需求类型</th>
+<th>体量小</th>
+<th>体量中</th>
+<th>体量大</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0 到 1 需求</td>
+<td>裸模型，可选 scenario-thinking</td>
+<td>推荐 scenario-thinking</td>
+<td>强制 OpenSpec&#x2F;Superpowers</td>
+</tr>
+<tr>
+<td>现有代码二开</td>
+<td>强制 scenario-thinking</td>
+<td>强制 scenario-thinking</td>
+<td>强制 OpenSpec&#x2F;Superpowers</td>
+</tr>
+</tbody></table>
+<p>这个矩阵是前两篇文章的真正合流点。</p>
+<p><code>scenario-thinking</code> 不是只给中型需求用的。只要是现有代码二开，即使体量看起来小，也建议先推演。因为二开不是看“改几行代码”，而是看“有没有旧行为兼容风险”。</p>
+<p>OpenSpec&#x2F;Superpowers 也不是所有需求都要用。它适合大需求，但不适合每个小工具函数。流程是用来降风险的，不是用来制造仪式感的。</p>
+<h2 id="小需求：可以让模型直接做"><a href="#小需求：可以让模型直接做" class="headerlink" title="小需求：可以让模型直接做"></a>小需求：可以让模型直接做</h2><p>比如新增一个获取当前时区的工具方法，逻辑单一，改动文件少，也没有复杂业务分支。</p>
+<img src="../../../../images/harness-development-workflow/small-requirement-mode.png" alt="小体量 0 到 1 需求选择裸模型模式">
+
+<p>这类需求可以直接进入裸模型模式：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">理解需求</span><br><span class="line">探索少量上下文</span><br><span class="line">实现功能</span><br><span class="line">运行相关验证</span><br><span class="line">报告结果</span><br></pre></td></tr></table></figure>
+
+<p>但裸模型模式也不是“完全放飞”。它仍然有边界：</p>
+<ul>
+<li>不做无关重构；</li>
+<li>不扩展需求外功能；</li>
+<li>实现中发现复杂度上升，要暂停并重新评估模式；</li>
+<li>能跑验证就跑验证。</li>
+</ul>
+<p>裸模型适合的是“清楚、短、小”的任务，不适合“看起来短，但业务含义复杂”的任务。</p>
+<h2 id="二开需求：优先-scenario-thinking"><a href="#二开需求：优先-scenario-thinking" class="headerlink" title="二开需求：优先 scenario-thinking"></a>二开需求：优先 scenario-thinking</h2><p>如果需求是“在已有接口上补一个标识”“放开某个校验”“调整已有数量计算”，就不要急着写代码。</p>
+<img src="../../../../images/harness-development-workflow/secondary-development-mode.png" alt="现有代码二开需求选择 scenario-thinking 模式">
+
+<p>这类需求最容易出现的问题是：AI 只实现了新场景，却破坏了旧场景。</p>
+<p>所以 Harness 会把它导向 <code>scenario-thinking</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">/thinking</span><br><span class="line">  识别现有实现</span><br><span class="line">  澄清业务边界</span><br><span class="line">  穷举正常、边界、异常、兼容性场景</span><br><span class="line">  做完整数值推演</span><br><span class="line"></span><br><span class="line">/thinking-apply</span><br><span class="line">  生成详细设计文档</span><br><span class="line">  明确算法、入参、改动范围、注意事项</span><br><span class="line"></span><br><span class="line">实现阶段</span><br><span class="line">  按设计文档修改</span><br><span class="line">  逐场景验证</span><br></pre></td></tr></table></figure>
+
+<p>这里最关键的是兼容性场景。比如新增一个 Boolean 标识时，至少要问清：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">不传字段时是否等同 false？</span><br><span class="line">null 是否保持旧逻辑？</span><br><span class="line">true 是否完全跳过旧校验？</span><br><span class="line">这个标识是请求级还是明细行级？</span><br><span class="line">特殊类型是否受影响？</span><br></pre></td></tr></table></figure>
+
+<p>这些问题不问清楚，代码实现很容易看起来正确，实际语义却偏了。</p>
+<h2 id="大需求：进入完整流程"><a href="#大需求：进入完整流程" class="headerlink" title="大需求：进入完整流程"></a>大需求：进入完整流程</h2><p>如果需求涉及多个模块、多条流程、多个页面或接口，甚至还包含权限、状态机、任务拆解、数据模型等内容，就应该进入 OpenSpec&#x2F;Superpowers 模式。</p>
+<img src="../../../../images/harness-development-workflow/large-requirement-mode.png" alt="大体量需求选择 OpenSpec 和 Superpowers 模式">
+
+<p>这时完整流程的价值会变得明显：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">/opsx:propose</span><br><span class="line">  生成 proposal、design、tasks、spec</span><br><span class="line"></span><br><span class="line">/opsx:apply</span><br><span class="line">  先验证设计和任务完整性</span><br><span class="line">  再进入 TDD 或子代理约束</span><br><span class="line">  然后按任务实现</span><br><span class="line"></span><br><span class="line">代码审查</span><br><span class="line">  检查实现是否符合设计</span><br><span class="line">  检查测试和边界是否覆盖</span><br><span class="line">  处理审查反馈</span><br></pre></td></tr></table></figure>
+
+<p>这条路线重，但适合重需求。它把“需求分析、详细设计、任务拆解、测试约束、代码审查”都放进流程里，降低大需求里最常见的两个问题：范围漂移和实现不完整。</p>
+<h2 id="模式隔离很重要"><a href="#模式隔离很重要" class="headerlink" title="模式隔离很重要"></a>模式隔离很重要</h2><p>Harness 里还有一条容易被忽略的原则：<strong>一旦选定模式，就不要随意中途切换。</strong></p>
+<p>原因是不同模式的上下文组织方式不同。</p>
+<p>裸模型模式没有设计文档；scenario-thinking 有推演文档；OpenSpec&#x2F;Superpowers 有 proposal、design、tasks、spec 和测试约束。如果中途随意切换，AI 很可能丢失前一个模式里的关键前提。</p>
+<p>当然，模式不是永远不能升级。如果执行中发现体量被严重低估，应该暂停，说明原因，再征得用户确认后重新按更重的模式走。</p>
+<p>一个比较稳的规则是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">可以因为风险上升而升级模式；</span><br><span class="line">不要因为嫌麻烦而降级模式。</span><br></pre></td></tr></table></figure>
+
+<h2 id="Harness-和模型选择的关系"><a href="#Harness-和模型选择的关系" class="headerlink" title="Harness 和模型选择的关系"></a>Harness 和模型选择的关系</h2><p>原始材料里花了不少篇幅比较不同模型在三种模式下的表现。博客里我不展开具体评分，因为分数会随模型版本、项目代码、提示词和测试样本变化。</p>
+<p>更值得保留的是这个结论：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">模型能力重要，但流程约束同样重要。</span><br></pre></td></tr></table></figure>
+
+<p>当输入很模糊、流程很松散时，强模型的优势会很明显，因为它要承担更多隐性推理和补全工作。</p>
+<p>但当 Harness 把需求分流、场景推演、设计文档、任务拆解和验证标准都外化以后，成本更友好的模型也能在许多日常开发任务里稳定工作。它未必在所有维度都超过强模型，但足够多的风险已经被流程提前吸收。</p>
+<p>这也是 Harness 真正有意义的地方：它不是幻想用流程消灭模型差距，而是把“需要模型自由发挥的部分”尽量压缩到合理范围。</p>
+<p>仍然无法完全抹平的差距也要承认：</p>
+<ul>
+<li>训练数据决定的知识边界；</li>
+<li>极深推理链上的稳定性；</li>
+<li>指令遵循和细节把控；</li>
+<li>对陌生技术栈的真实理解。</li>
+</ul>
+<p>所以更合理的目标不是“让所有模型一样强”，而是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">让日常需求尽量不依赖模型的临场发挥。</span><br></pre></td></tr></table></figure>
+
+<h2 id="写成-AI-Rules-时要注意什么"><a href="#写成-AI-Rules-时要注意什么" class="headerlink" title="写成 AI Rules 时要注意什么"></a>写成 AI Rules 时要注意什么</h2><p>如果要把 Harness 落成项目规则，我会保留四类内容。</p>
+<p>第一，模式选择标准。收到需求后，先评估体量和类型，再说明为什么选择某个模式。</p>
+<p>第二，三条模式的执行流程。裸模型、scenario-thinking、OpenSpec&#x2F;Superpowers 要有清晰边界。</p>
+<p>第三，禁止事项。比如现有代码二开不能直接用裸模型，大需求不能跳过设计，<code>/opsx:apply</code> 不能直接等价于写代码。</p>
+<p>第四，异常处理。比如推演覆盖不了场景怎么办，scenario-thinking 过程中发现是大需求怎么办，OpenSpec 设计不完整怎么办。</p>
+<p>规则不用写得越长越好。真正重要的是让 AI 在关键分叉点上不乱选。</p>
+<h2 id="这个系列最后串起来是什么"><a href="#这个系列最后串起来是什么" class="headerlink" title="这个系列最后串起来是什么"></a>这个系列最后串起来是什么</h2><p>到这里，三篇文章其实可以串成一条线。</p>
+<p>第一篇解决的是大需求怎么稳：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">OpenSpec 负责结构化产物；</span><br><span class="line">Superpowers 负责开发纪律。</span><br></pre></td></tr></table></figure>
+
+<p>第二篇解决的是二开需求怎么稳：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">scenario-thinking 负责把隐性场景推演出来。</span><br></pre></td></tr></table></figure>
+
+<p>第三篇解决的是入口怎么选：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Harness 负责根据需求体量和类型，把任务分到合适流程里。</span><br></pre></td></tr></table></figure>
+
+<p>如果只看单个工具，很容易陷入“这个 Skill 好不好用”的讨论。放到 Harness 视角下，问题会变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">这个需求需要多少约束？</span><br><span class="line">哪些风险应该在编码前暴露？</span><br><span class="line">哪些验证应该在交付前完成？</span><br></pre></td></tr></table></figure>
+
+<p>这才是 AI 编码真正该工程化的地方。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>Harness 可以理解成 AI 编码里的模式选择器。</p>
+<p>它不追求所有需求都走最完整的流程，也不放任所有需求都无约束推进。它做的是按风险分层：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">小需求：直接做，但不越界；</span><br><span class="line">二开和中型需求：先推演，再实现；</span><br><span class="line">大需求：先设计、再测试约束、再实现和审查。</span><br></pre></td></tr></table></figure>
+
+<p>前两篇文章分别讲了其中两条路线，这篇则把它们收束成一个判断框架。</p>
+<p>对我来说，Harness 最重要的价值不是省 token，也不是替换强模型，而是让 AI 编码从“模型单点能力”变成“模型 + 流程 + 验证”的组合能力。这样项目越复杂，流程的收益越明显。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Agent-Skill/" rel="tag"># Agent Skill</a>
+              <a href="/tags/AI%E8%BE%85%E5%8A%A9%E7%BC%96%E7%A8%8B/" rel="tag"># AI辅助编程</a>
+              <a href="/tags/Harness/" rel="tag"># Harness</a>
+              <a href="/tags/OpenSpec/" rel="tag"># OpenSpec</a>
+              <a href="/tags/Scenario-Thinking/" rel="tag"># Scenario Thinking</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2026/07/07/scenario-thinking-workflow/" rel="prev" title="补充篇：用 scenario-thinking 把二次开发先推演清楚">
+      <i class="fa fa-chevron-left"></i> 补充篇：用 scenario-thinking 把二次开发先推演清楚
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+    <div class="comments" id="utterances-container"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Harness-%E4%B8%8D%E6%98%AF%E4%B8%80%E4%B8%AA%E5%85%B7%E4%BD%93%E5%B7%A5%E5%85%B7"><span class="nav-number">1.</span> <span class="nav-text">Harness 不是一个具体工具</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E5%AE%83%E8%83%BD%E7%BC%A9%E5%B0%8F%E6%A8%A1%E5%9E%8B%E5%B7%AE%E8%B7%9D"><span class="nav-number">2.</span> <span class="nav-text">为什么它能缩小模型差距</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E6%9D%A1%E5%BC%80%E5%8F%91%E8%B7%AF%E7%BA%BF"><span class="nav-number">3.</span> <span class="nav-text">三条开发路线</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%88%E5%88%A4%E6%96%AD%E4%BD%93%E9%87%8F%EF%BC%8C%E5%86%8D%E5%88%A4%E6%96%AD%E7%B1%BB%E5%9E%8B"><span class="nav-number">4.</span> <span class="nav-text">先判断体量，再判断类型</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%BC%8F%E9%80%89%E6%8B%A9%E7%9F%A9%E9%98%B5"><span class="nav-number">5.</span> <span class="nav-text">模式选择矩阵</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B0%8F%E9%9C%80%E6%B1%82%EF%BC%9A%E5%8F%AF%E4%BB%A5%E8%AE%A9%E6%A8%A1%E5%9E%8B%E7%9B%B4%E6%8E%A5%E5%81%9A"><span class="nav-number">6.</span> <span class="nav-text">小需求：可以让模型直接做</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8C%E5%BC%80%E9%9C%80%E6%B1%82%EF%BC%9A%E4%BC%98%E5%85%88-scenario-thinking"><span class="nav-number">7.</span> <span class="nav-text">二开需求：优先 scenario-thinking</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%A4%A7%E9%9C%80%E6%B1%82%EF%BC%9A%E8%BF%9B%E5%85%A5%E5%AE%8C%E6%95%B4%E6%B5%81%E7%A8%8B"><span class="nav-number">8.</span> <span class="nav-text">大需求：进入完整流程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%A8%A1%E5%BC%8F%E9%9A%94%E7%A6%BB%E5%BE%88%E9%87%8D%E8%A6%81"><span class="nav-number">9.</span> <span class="nav-text">模式隔离很重要</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Harness-%E5%92%8C%E6%A8%A1%E5%9E%8B%E9%80%89%E6%8B%A9%E7%9A%84%E5%85%B3%E7%B3%BB"><span class="nav-number">10.</span> <span class="nav-text">Harness 和模型选择的关系</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%86%99%E6%88%90-AI-Rules-%E6%97%B6%E8%A6%81%E6%B3%A8%E6%84%8F%E4%BB%80%E4%B9%88"><span class="nav-number">11.</span> <span class="nav-text">写成 AI Rules 时要注意什么</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%BF%99%E4%B8%AA%E7%B3%BB%E5%88%97%E6%9C%80%E5%90%8E%E4%B8%B2%E8%B5%B7%E6%9D%A5%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">12.</span> <span class="nav-text">这个系列最后串起来是什么</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">13.</span> <span class="nav-text">总结</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Libra"
+      src="/images/IMG_1578.jpeg">
+  <p class="site-author-name" itemprop="name">Libra</p>
+  <div class="site-description" itemprop="description">记录技术、项目与思考</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">14</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">32</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Moyu-Yunru" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Moyu-Yunru" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Libra</span>
+</div><div class="libra-footer-left">
+  <span>由 <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> 驱动</span>
+  <span>主题 <a href="https://pisces.theme-next.org/" rel="noopener" target="_blank">NexT.Pisces</a></span>
+</div>
+
+<div class="libra-footer-extra">
+  <span>共撰写了 14 篇文章</span>
+  <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<script>
+NexT.utils.loadComments(document.querySelector('#utterances-container'), () => {
+  var container = document.querySelector('#utterances-container');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  var script = document.createElement('script');
+  script.src = 'https://utteranc.es/client.js';
+  script.setAttribute('repo', "Moyu-Yunru/blog-comments");
+  script.setAttribute('issue-term', "title");
+  script.setAttribute('theme', "github-light");
+  script.crossOrigin = 'anonymous';
+  script.async = true;
+
+  container.appendChild(script);
+});
+</script>
+<script>
+(function() {
+  var phrases = [
+    '随心所欲地享受每一天(￣︶￣*))',
+    '学习 LLM，也拆解 Agent 的工作方式',
+    '把 AI 工具链放进真实工程场景',
+    '记录问题的答案，也记录学习的路径',
+    '如果喜欢，建议给个支持( •̀ ω •́ )✧',
+    '喜欢的话，留个言好嘛(oﾟvﾟ)ノ',
+    '你有建议？反馈作者(●^◡^●)',
+    '我们总是走得太急，却忘了当初为什么出发——纪伯伦',
+    '火车是朝前开的，去哪儿并不重要，关键在于窗外的风景——吕子乔',
+    '世界上只有一种真正的英雄主义，那就是认清生活的真相后依然热爱生活——罗曼·罗兰',
+  ];
+
+  function initTypewriter() {
+    var target = document.querySelector('[data-libra-typewriter]');
+    if (!target) return;
+
+    if (window.__libraTypewriterTimer) {
+      clearTimeout(window.__libraTypewriterTimer);
+    }
+
+    var phraseIndex = 0;
+    var charIndex = 0;
+    var deleting = false;
+
+    function tick() {
+      var current = phrases[phraseIndex];
+      target.textContent = current.slice(0, charIndex);
+
+      if (!deleting && charIndex < current.length) {
+        charIndex += 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 88);
+        return;
+      }
+
+      if (!deleting && charIndex === current.length) {
+        deleting = true;
+        window.__libraTypewriterTimer = setTimeout(tick, 1600);
+        return;
+      }
+
+      if (deleting && charIndex > 0) {
+        charIndex -= 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 42);
+        return;
+      }
+
+      deleting = false;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      window.__libraTypewriterTimer = setTimeout(tick, 420);
+    }
+
+    tick();
+  }
+
+  function initRuntime() {
+    var runtime = document.getElementById('libra-site-runtime');
+    if (!runtime) return;
+
+    var start = new Date(runtime.getAttribute('data-start')).getTime();
+    if (!start) return;
+
+    function renderRuntime() {
+      var diff = Math.max(0, Date.now() - start);
+      var seconds = Math.floor(diff / 1000);
+      var days = Math.floor(seconds / 86400);
+      seconds %= 86400;
+      var hours = Math.floor(seconds / 3600);
+      seconds %= 3600;
+      var minutes = Math.floor(seconds / 60);
+      seconds %= 60;
+      runtime.textContent = days + ' 天 ' + hours + ' 小时 ' + minutes + ' 分钟 ' + seconds + ' 秒';
+    }
+
+    renderRuntime();
+    if (window.__libraRuntimeTimer) {
+      clearInterval(window.__libraRuntimeTimer);
+    }
+    window.__libraRuntimeTimer = setInterval(renderRuntime, 1000);
+  }
+
+  function initLibraHome() {
+    initTypewriter();
+    initRuntime();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLibraHome);
+  } else {
+    initLibraHome();
+  }
+  document.addEventListener('pjax:success', initLibraHome);
+})();
+</script>
+
+</body>
+</html>

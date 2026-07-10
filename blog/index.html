@@ -165,6 +165,757 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/07/09/harness-development-workflow/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2026/07/09/harness-development-workflow/" class="post-title-link" itemprop="url">从 OpenSpec 到 Harness：给 AI 编码做一个模式选择器</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2026-07-09 23:28:41 / 修改时间：23:30:56" itemprop="dateCreated datePublished" datetime="2026-07-09T23:28:41+08:00">2026-07-09</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>前两篇文章分别讲了两件事。</p>
+<p>第一篇是 <a href="/2026/07/07/openspec-superpowers-workflow/">OpenSpec 和 Superpowers 怎么配合</a>：当需求比较大时，先用 OpenSpec 生成设计、任务和规范，再用 Superpowers 约束设计验证、TDD、实现和代码审查。</p>
+<p>第二篇是 <a href="/2026/07/07/scenario-thinking-workflow/">scenario-thinking 怎么用于二次开发</a>：当需求没有大到需要完整流程，但业务边界又不能靠 AI 自己猜时，先做场景穷举和数值推演，再按推演文档实现。</p>
+<p>这篇可以看作前两篇的总结：<strong>我们不应该只问“用哪个模型”，而应该先问“这个需求该走哪种开发模式”。</strong></p>
+<p>这就是 Harness 的位置。</p>
+<h2 id="Harness-不是一个具体工具"><a href="#Harness-不是一个具体工具" class="headerlink" title="Harness 不是一个具体工具"></a>Harness 不是一个具体工具</h2><p>Harness 直译有“马具、缰绳”的意思。放到 AI 编码里，它不是某一个固定插件，也不是某一个模型能力，而是一类工程化约束手段。</p>
+<p>我更愿意这样理解它：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">模型负责生成能力；</span><br><span class="line">Harness 负责约束生成路径。</span><br></pre></td></tr></table></figure>
+
+<p>用户给 AI 的原始输入通常很短，比如“帮我改一下这个接口”“新增一个工具类”“按需求文档完成这个功能”。这类输入对人来说可以继续追问，对模型来说却很容易变成发散空间。</p>
+<p>Harness 要做的事情，就是把模糊目标变成明确过程：</p>
+<ul>
+<li>先判断需求体量；</li>
+<li>再判断是全新需求还是现有代码二开；</li>
+<li>然后选择裸模型、scenario-thinking 或 OpenSpec&#x2F;Superpowers；</li>
+<li>最后把 AI 约束在选定模式里完成交付。</li>
+</ul>
+<p>所以 Harness 的价值，不是让模型突然“变聪明”，而是减少模型需要临场猜测的部分。</p>
+<h2 id="为什么它能缩小模型差距"><a href="#为什么它能缩小模型差距" class="headerlink" title="为什么它能缩小模型差距"></a>为什么它能缩小模型差距</h2><p>不同模型之间的差距，很多时候不是体现在“会不会写一个 if”，而是体现在更前面的判断上：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">能不能从模糊需求里推断真实意图；</span><br><span class="line">能不能找到正确的业务抽象；</span><br><span class="line">能不能稳定完成多步推理；</span><br><span class="line">能不能在长上下文里不偏航。</span><br></pre></td></tr></table></figure>
+
+<p>如果用户只说“我要吃饭”，中间有太多信息需要补：什么时候、在哪、和谁、预算多少、忌口是什么。模型越强，越可能补得合理；模型弱一点，就更容易发散。</p>
+<p>但如果输入变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">今晚 7 点，两个人，在公司食堂二楼吃饭，预算 50 元以内，不吃辣。</span><br></pre></td></tr></table></figure>
+
+<p>模型之间的差距就会缩小。因为很多需要推断的东西，已经被外部过程补足了。</p>
+<p>AI 编码也是一样。Harness 的本质是把“请你猜”改成“按这个流程判断、按这个文档实现、按这些场景验证”。</p>
+<p>它主要降低三类风险：</p>
+<ul>
+<li>意图推断风险：通过需求体量和类型判断，减少模型自己猜模式；</li>
+<li>推理发散风险：通过场景推演、设计文档和任务清单，把推理步骤外化；</li>
+<li>实现越界风险：通过模式隔离和完成标准，限制 AI 随意扩展范围。</li>
+</ul>
+<h2 id="三条开发路线"><a href="#三条开发路线" class="headerlink" title="三条开发路线"></a>三条开发路线</h2><p>Harness 的核心，是把需求分到三条路线里。</p>
+<img src="../../../../images/harness-development-workflow/harness-flow.png" alt="Harness 开发设计流程图">
+
+<p>第一条是裸模型模式。</p>
+<p>它适合非常小的 0 到 1 需求：新增一个工具函数、补一个简单转换方法、写一个不涉及复杂业务分支的小能力。这类需求如果也强行走完整设计流程，反而会把简单事情做重。</p>
+<p>第二条是 <code>scenario-thinking</code> 模式。</p>
+<p>它适合中小体量需求，尤其适合现有代码二开。原因很简单：二开最怕误伤旧逻辑。看起来只是新增一个标识、放开一个校验，背后可能会影响 null、false、旧调用方、特殊类型、混合明细、多轮调用等一串场景。</p>
+<p>第三条是 OpenSpec&#x2F;Superpowers 模式。</p>
+<p>它适合大体量需求：改动跨多个模块，涉及多条主流程和异常流，需要明确设计、任务、测试约束和代码审查。这时完整流程虽然重，但它能把风险压住。</p>
+<p>可以粗略记成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">小而新的需求：裸模型</span><br><span class="line">中小型二开或边界多的需求：scenario-thinking</span><br><span class="line">大体量需求：OpenSpec/Superpowers</span><br></pre></td></tr></table></figure>
+
+<h2 id="先判断体量，再判断类型"><a href="#先判断体量，再判断类型" class="headerlink" title="先判断体量，再判断类型"></a>先判断体量，再判断类型</h2><p>Harness 的第一步不是调用 Skill，而是做模式选择。</p>
+<p>需求体量可以按四个维度判断：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>小</th>
+<th>中</th>
+<th>大</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>改动文件数</td>
+<td>3 个以内</td>
+<td>3 到 8 个</td>
+<td>超过 8 个</td>
+</tr>
+<tr>
+<td>业务场景</td>
+<td>单一无分支</td>
+<td>2 到 5 个场景</td>
+<td>多条主流程和异常流</td>
+</tr>
+<tr>
+<td>模块依赖</td>
+<td>基本无跨模块</td>
+<td>1 到 2 个模块</td>
+<td>跨多个模块或服务</td>
+</tr>
+<tr>
+<td>预估时间</td>
+<td>30 分钟以内</td>
+<td>30 分钟到 2 小时</td>
+<td>超过 2 小时</td>
+</tr>
+</tbody></table>
+<p>这里有一个保守原则：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">拿不准，就往大评。</span><br></pre></td></tr></table></figure>
+
+<p>这不是为了显得流程严谨，而是因为低估需求体量的代价很高。一个实际需要设计和测试约束的需求，如果误判成“随手一改”，后面通常会付出更多返工成本。</p>
+<p>判断完体量，还要判断需求类型：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">0 到 1 需求：现有代码里没有对应实现，是新增能力。</span><br><span class="line">现有代码二开：在已有接口、方法、流程上修改或扩展。</span><br></pre></td></tr></table></figure>
+
+<p>二者最大的区别是：0 到 1 更关注“怎么建”，二开更关注“旧行为不能坏”。</p>
+<h2 id="模式选择矩阵"><a href="#模式选择矩阵" class="headerlink" title="模式选择矩阵"></a>模式选择矩阵</h2><p>把体量和类型合起来，可以得到一个简单矩阵：</p>
+<table>
+<thead>
+<tr>
+<th>需求类型</th>
+<th>体量小</th>
+<th>体量中</th>
+<th>体量大</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0 到 1 需求</td>
+<td>裸模型，可选 scenario-thinking</td>
+<td>推荐 scenario-thinking</td>
+<td>强制 OpenSpec&#x2F;Superpowers</td>
+</tr>
+<tr>
+<td>现有代码二开</td>
+<td>强制 scenario-thinking</td>
+<td>强制 scenario-thinking</td>
+<td>强制 OpenSpec&#x2F;Superpowers</td>
+</tr>
+</tbody></table>
+<p>这个矩阵是前两篇文章的真正合流点。</p>
+<p><code>scenario-thinking</code> 不是只给中型需求用的。只要是现有代码二开，即使体量看起来小，也建议先推演。因为二开不是看“改几行代码”，而是看“有没有旧行为兼容风险”。</p>
+<p>OpenSpec&#x2F;Superpowers 也不是所有需求都要用。它适合大需求，但不适合每个小工具函数。流程是用来降风险的，不是用来制造仪式感的。</p>
+<h2 id="小需求：可以让模型直接做"><a href="#小需求：可以让模型直接做" class="headerlink" title="小需求：可以让模型直接做"></a>小需求：可以让模型直接做</h2><p>比如新增一个获取当前时区的工具方法，逻辑单一，改动文件少，也没有复杂业务分支。</p>
+<img src="../../../../images/harness-development-workflow/small-requirement-mode.png" alt="小体量 0 到 1 需求选择裸模型模式">
+
+<p>这类需求可以直接进入裸模型模式：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">理解需求</span><br><span class="line">探索少量上下文</span><br><span class="line">实现功能</span><br><span class="line">运行相关验证</span><br><span class="line">报告结果</span><br></pre></td></tr></table></figure>
+
+<p>但裸模型模式也不是“完全放飞”。它仍然有边界：</p>
+<ul>
+<li>不做无关重构；</li>
+<li>不扩展需求外功能；</li>
+<li>实现中发现复杂度上升，要暂停并重新评估模式；</li>
+<li>能跑验证就跑验证。</li>
+</ul>
+<p>裸模型适合的是“清楚、短、小”的任务，不适合“看起来短，但业务含义复杂”的任务。</p>
+<h2 id="二开需求：优先-scenario-thinking"><a href="#二开需求：优先-scenario-thinking" class="headerlink" title="二开需求：优先 scenario-thinking"></a>二开需求：优先 scenario-thinking</h2><p>如果需求是“在已有接口上补一个标识”“放开某个校验”“调整已有数量计算”，就不要急着写代码。</p>
+<img src="../../../../images/harness-development-workflow/secondary-development-mode.png" alt="现有代码二开需求选择 scenario-thinking 模式">
+
+<p>这类需求最容易出现的问题是：AI 只实现了新场景，却破坏了旧场景。</p>
+<p>所以 Harness 会把它导向 <code>scenario-thinking</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">/thinking</span><br><span class="line">  识别现有实现</span><br><span class="line">  澄清业务边界</span><br><span class="line">  穷举正常、边界、异常、兼容性场景</span><br><span class="line">  做完整数值推演</span><br><span class="line"></span><br><span class="line">/thinking-apply</span><br><span class="line">  生成详细设计文档</span><br><span class="line">  明确算法、入参、改动范围、注意事项</span><br><span class="line"></span><br><span class="line">实现阶段</span><br><span class="line">  按设计文档修改</span><br><span class="line">  逐场景验证</span><br></pre></td></tr></table></figure>
+
+<p>这里最关键的是兼容性场景。比如新增一个 Boolean 标识时，至少要问清：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">不传字段时是否等同 false？</span><br><span class="line">null 是否保持旧逻辑？</span><br><span class="line">true 是否完全跳过旧校验？</span><br><span class="line">这个标识是请求级还是明细行级？</span><br><span class="line">特殊类型是否受影响？</span><br></pre></td></tr></table></figure>
+
+<p>这些问题不问清楚，代码实现很容易看起来正确，实际语义却偏了。</p>
+<h2 id="大需求：进入完整流程"><a href="#大需求：进入完整流程" class="headerlink" title="大需求：进入完整流程"></a>大需求：进入完整流程</h2><p>如果需求涉及多个模块、多条流程、多个页面或接口，甚至还包含权限、状态机、任务拆解、数据模型等内容，就应该进入 OpenSpec&#x2F;Superpowers 模式。</p>
+<img src="../../../../images/harness-development-workflow/large-requirement-mode.png" alt="大体量需求选择 OpenSpec 和 Superpowers 模式">
+
+<p>这时完整流程的价值会变得明显：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">/opsx:propose</span><br><span class="line">  生成 proposal、design、tasks、spec</span><br><span class="line"></span><br><span class="line">/opsx:apply</span><br><span class="line">  先验证设计和任务完整性</span><br><span class="line">  再进入 TDD 或子代理约束</span><br><span class="line">  然后按任务实现</span><br><span class="line"></span><br><span class="line">代码审查</span><br><span class="line">  检查实现是否符合设计</span><br><span class="line">  检查测试和边界是否覆盖</span><br><span class="line">  处理审查反馈</span><br></pre></td></tr></table></figure>
+
+<p>这条路线重，但适合重需求。它把“需求分析、详细设计、任务拆解、测试约束、代码审查”都放进流程里，降低大需求里最常见的两个问题：范围漂移和实现不完整。</p>
+<h2 id="模式隔离很重要"><a href="#模式隔离很重要" class="headerlink" title="模式隔离很重要"></a>模式隔离很重要</h2><p>Harness 里还有一条容易被忽略的原则：<strong>一旦选定模式，就不要随意中途切换。</strong></p>
+<p>原因是不同模式的上下文组织方式不同。</p>
+<p>裸模型模式没有设计文档；scenario-thinking 有推演文档；OpenSpec&#x2F;Superpowers 有 proposal、design、tasks、spec 和测试约束。如果中途随意切换，AI 很可能丢失前一个模式里的关键前提。</p>
+<p>当然，模式不是永远不能升级。如果执行中发现体量被严重低估，应该暂停，说明原因，再征得用户确认后重新按更重的模式走。</p>
+<p>一个比较稳的规则是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">可以因为风险上升而升级模式；</span><br><span class="line">不要因为嫌麻烦而降级模式。</span><br></pre></td></tr></table></figure>
+
+<h2 id="Harness-和模型选择的关系"><a href="#Harness-和模型选择的关系" class="headerlink" title="Harness 和模型选择的关系"></a>Harness 和模型选择的关系</h2><p>原始材料里花了不少篇幅比较不同模型在三种模式下的表现。博客里我不展开具体评分，因为分数会随模型版本、项目代码、提示词和测试样本变化。</p>
+<p>更值得保留的是这个结论：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">模型能力重要，但流程约束同样重要。</span><br></pre></td></tr></table></figure>
+
+<p>当输入很模糊、流程很松散时，强模型的优势会很明显，因为它要承担更多隐性推理和补全工作。</p>
+<p>但当 Harness 把需求分流、场景推演、设计文档、任务拆解和验证标准都外化以后，成本更友好的模型也能在许多日常开发任务里稳定工作。它未必在所有维度都超过强模型，但足够多的风险已经被流程提前吸收。</p>
+<p>这也是 Harness 真正有意义的地方：它不是幻想用流程消灭模型差距，而是把“需要模型自由发挥的部分”尽量压缩到合理范围。</p>
+<p>仍然无法完全抹平的差距也要承认：</p>
+<ul>
+<li>训练数据决定的知识边界；</li>
+<li>极深推理链上的稳定性；</li>
+<li>指令遵循和细节把控；</li>
+<li>对陌生技术栈的真实理解。</li>
+</ul>
+<p>所以更合理的目标不是“让所有模型一样强”，而是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">让日常需求尽量不依赖模型的临场发挥。</span><br></pre></td></tr></table></figure>
+
+<h2 id="写成-AI-Rules-时要注意什么"><a href="#写成-AI-Rules-时要注意什么" class="headerlink" title="写成 AI Rules 时要注意什么"></a>写成 AI Rules 时要注意什么</h2><p>如果要把 Harness 落成项目规则，我会保留四类内容。</p>
+<p>第一，模式选择标准。收到需求后，先评估体量和类型，再说明为什么选择某个模式。</p>
+<p>第二，三条模式的执行流程。裸模型、scenario-thinking、OpenSpec&#x2F;Superpowers 要有清晰边界。</p>
+<p>第三，禁止事项。比如现有代码二开不能直接用裸模型，大需求不能跳过设计，<code>/opsx:apply</code> 不能直接等价于写代码。</p>
+<p>第四，异常处理。比如推演覆盖不了场景怎么办，scenario-thinking 过程中发现是大需求怎么办，OpenSpec 设计不完整怎么办。</p>
+<p>规则不用写得越长越好。真正重要的是让 AI 在关键分叉点上不乱选。</p>
+<h2 id="这个系列最后串起来是什么"><a href="#这个系列最后串起来是什么" class="headerlink" title="这个系列最后串起来是什么"></a>这个系列最后串起来是什么</h2><p>到这里，三篇文章其实可以串成一条线。</p>
+<p>第一篇解决的是大需求怎么稳：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">OpenSpec 负责结构化产物；</span><br><span class="line">Superpowers 负责开发纪律。</span><br></pre></td></tr></table></figure>
+
+<p>第二篇解决的是二开需求怎么稳：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">scenario-thinking 负责把隐性场景推演出来。</span><br></pre></td></tr></table></figure>
+
+<p>第三篇解决的是入口怎么选：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Harness 负责根据需求体量和类型，把任务分到合适流程里。</span><br></pre></td></tr></table></figure>
+
+<p>如果只看单个工具，很容易陷入“这个 Skill 好不好用”的讨论。放到 Harness 视角下，问题会变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">这个需求需要多少约束？</span><br><span class="line">哪些风险应该在编码前暴露？</span><br><span class="line">哪些验证应该在交付前完成？</span><br></pre></td></tr></table></figure>
+
+<p>这才是 AI 编码真正该工程化的地方。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>Harness 可以理解成 AI 编码里的模式选择器。</p>
+<p>它不追求所有需求都走最完整的流程，也不放任所有需求都无约束推进。它做的是按风险分层：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">小需求：直接做，但不越界；</span><br><span class="line">二开和中型需求：先推演，再实现；</span><br><span class="line">大需求：先设计、再测试约束、再实现和审查。</span><br></pre></td></tr></table></figure>
+
+<p>前两篇文章分别讲了其中两条路线，这篇则把它们收束成一个判断框架。</p>
+<p>对我来说，Harness 最重要的价值不是省 token，也不是替换强模型，而是让 AI 编码从“模型单点能力”变成“模型 + 流程 + 验证”的组合能力。这样项目越复杂，流程的收益越明显。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/07/07/scenario-thinking-workflow/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2026/07/07/scenario-thinking-workflow/" class="post-title-link" itemprop="url">补充篇：用 scenario-thinking 把二次开发先推演清楚</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2026-07-07 23:59:22" itemprop="dateCreated datePublished" datetime="2026-07-07T23:59:22+08:00">2026-07-07</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-07-08 00:01:52" itemprop="dateModified" datetime="2026-07-08T00:01:52+08:00">2026-07-08</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p><a href="/2026/07/07/openspec-superpowers-workflow/">上一篇文章</a>里，我整理了 OpenSpec 和 Superpowers 的组合方式：先把需求变成设计产物，再用流程纪律约束 AI 按步骤实现。</p>
+<p>那套方式适合中等以上复杂度的需求，尤其是从 0 到 1 做一个新能力时，它能把 proposal、design、tasks、spec 都沉淀下来，后续实现和审查都有依据。</p>
+<p>但实际开发里还有另一类很常见的任务：<strong>现有接口或现有方法上做一个看起来不大的二次改造</strong>。</p>
+<p>比如只是新增一个标识、放开一个校验、调整一段数量计算、补一类特殊状态。直接让 AI 写代码，它可能马上动手；完整走一遍 OpenSpec，又显得有点重。这个中间地带，就很适合引入 <code>scenario-thinking</code>。</p>
+<h2 id="scenario-thinking-是什么"><a href="#scenario-thinking-是什么" class="headerlink" title="scenario-thinking 是什么"></a>scenario-thinking 是什么</h2><p><code>scenario-thinking</code> 是一个偏分析和设计的 Agent Skill。它不急着生成代码，而是要求 AI 先做两件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">第一步：穷举场景</span><br><span class="line">第二步：基于已确认的推演结果写详细设计</span><br></pre></td></tr></table></figure>
+
+<p>它的核心理念可以概括成一句话：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">先在纸上把所有边界情况过一遍，确认算法自洽，再写代码。</span><br></pre></td></tr></table></figure>
+
+<p>这和 TDD 有点像，但关注点不同。TDD 是用测试约束实现，scenario-thinking 是用业务场景和数值推演约束设计。对于金额计算、库存占用、状态流转、额度扣减、差量比对这类需求，很多 bug 不是代码语法问题，而是某个边界场景一开始就没想清楚。</p>
+<p>所以 scenario-thinking 真正解决的是：</p>
+<ul>
+<li>不让 AI 在需求描述还含糊时直接编码；</li>
+<li>不让 AI 只覆盖“快乐路径”；</li>
+<li>不让隐性业务约束藏在口头描述里；</li>
+<li>不让实现阶段靠猜测补全边界条件。</li>
+</ul>
+<h2 id="它和上一篇流程的关系"><a href="#它和上一篇流程的关系" class="headerlink" title="它和上一篇流程的关系"></a>它和上一篇流程的关系</h2><p>如果说上一篇的 OpenSpec + Superpowers 是一套完整研发流程，那么 scenario-thinking 更像是它的轻量补充。</p>
+<img src="../../../../images/scenario-thinking-workflow/scenario-thinking-flow.png" alt="scenario-thinking 与测试约束开发的关系">
+
+<p>可以这样理解两者分工：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">OpenSpec + Superpowers：</span><br><span class="line">适合完整需求开发，强调设计产物、任务拆解、测试、实现和审查的端到端流程。</span><br><span class="line"></span><br><span class="line">scenario-thinking：</span><br><span class="line">适合现有逻辑改造，强调先穷举场景、推演数值、确认算法，再输出可编码的详设。</span><br></pre></td></tr></table></figure>
+
+<p>它不是要替代上一篇流程，而是补上一个更轻的入口。尤其当需求已经比较明确，但边界场景很多时，可以先用 scenario-thinking 把场景和算法推清楚，再把详设文档交给后续实现流程。</p>
+<p>一个比较顺手的组合方式是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">/thinking</span><br><span class="line">  -&gt; 场景穷举与业务确认</span><br><span class="line"></span><br><span class="line">/thinking-apply</span><br><span class="line">  -&gt; 生成详细设计与推演文档</span><br><span class="line"></span><br><span class="line">后续实现</span><br><span class="line">  -&gt; 按详设写代码、补测试、做代码审查</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，scenario-thinking 产出的不是最终代码，而是后续编码的“约束材料”。</p>
+<h2 id="两个核心命令"><a href="#两个核心命令" class="headerlink" title="两个核心命令"></a>两个核心命令</h2><p><code>scenario-thinking</code> 主要有两个命令。</p>
+<p>第一个是 <code>/thinking</code>，用于开始推演：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/thinking 说明我要改哪个接口、哪个方法、什么业务规则</span><br></pre></td></tr></table></figure>
+
+<p>收到这个命令后，AI 不应该直接写代码，而是先进入场景分析流程。</p>
+<img src="../../../../images/scenario-thinking-workflow/thinking-trigger.png" alt="/thinking 触发 scenario-thinking Skill">
+
+<p>第二个是 <code>/thinking-apply</code>，用于在推演结果确认后生成详细设计：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/thinking-apply</span><br></pre></td></tr></table></figure>
+
+<p>这一步会把前面确认过的场景、公式、边界、修改范围和注意事项合并成一个设计文档。后续实现时，AI 应该以这份文档为输入，而不是回到原始的一句话需求。</p>
+<h2 id="第一步：先判断是改造还是新建"><a href="#第一步：先判断是改造还是新建" class="headerlink" title="第一步：先判断是改造还是新建"></a>第一步：先判断是改造还是新建</h2><p><code>/thinking</code> 启动后，scenario-thinking 的第一步不是问业务问题，而是判断用户提到的目标是否已经存在。</p>
+<p>它会从用户输入里提取可能的复用目标，例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">接口路径</span><br><span class="line">类名</span><br><span class="line">方法名</span><br><span class="line">文件路径</span><br><span class="line">关键业务标识</span><br></pre></td></tr></table></figure>
+
+<p>然后在项目里搜索这些目标。如果发现已有实现，就会让用户确认：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">A. 在现有功能基础上修改或扩展</span><br><span class="line">B. 创建新的独立功能</span><br></pre></td></tr></table></figure>
+
+<img src="../../../../images/scenario-thinking-workflow/reuse-mode-check.png" alt="检测到现有实现后确认复用模式">
+
+<p>这个步骤很重要。很多二次开发事故都不是因为 AI 不会写代码，而是因为它没弄清楚“这是扩展旧逻辑，还是另起炉灶”。如果是现有接口改造，它必须先读现有调用链、校验逻辑、数据结构和边界条件；如果是新功能，才可以从零构建模型。</p>
+<p>我比较喜欢这个设计，因为它把一个容易被忽略的工程事实摆到了最前面：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">同样一句需求，落到已有代码和全新代码里，风险完全不同。</span><br></pre></td></tr></table></figure>
+
+<h2 id="第二步：一轮只问一个关键问题"><a href="#第二步：一轮只问一个关键问题" class="headerlink" title="第二步：一轮只问一个关键问题"></a>第二步：一轮只问一个关键问题</h2><p>进入推演后，AI 会开始澄清问题。这里最值得保留的一条规则是：<strong>每轮只问一个最关键的问题</strong>。</p>
+<p>二次开发里，用户经常只说目标场景，却没有说完所有派生场景。比如“允许某种数量超过可用数量”，这句话至少会引出几个问题：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">超过以后，已用数量应该按完整数量更新，还是只更新可用部分？</span><br><span class="line">这个开关是请求级，还是明细行级？</span><br><span class="line">不传这个字段时，是保持旧逻辑，还是走新逻辑？</span><br><span class="line">超过多少算允许，有没有上限？</span><br><span class="line">特殊类型数据是否也受这个标识影响？</span><br></pre></td></tr></table></figure>
+
+<p>这些问题如果不问，AI 会自己选一个“看起来合理”的答案。但业务规则里最危险的，恰好就是这些看起来合理的默认选择。</p>
+<img src="../../../../images/scenario-thinking-workflow/clarifying-question.png" alt="scenario-thinking 提出关键澄清问题">
+
+<p>比如一个数量改造场景里，核心公式可能是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">availableQty = totalQty - usedQty - cancelledQty</span><br></pre></td></tr></table></figure>
+
+<p>现在新增一个 <code>allowOverUse</code> 标识。如果它为 <code>true</code>，允许本次使用数量大于 <code>availableQty</code>。那超出的部分到底要不要写入 <code>usedQty</code>？</p>
+<p>方案 A 是只更新可用部分：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">totalQty = 100</span><br><span class="line">usedQty = 50</span><br><span class="line">cancelledQty = 0</span><br><span class="line">requestQty = 80</span><br><span class="line">availableQty = 50</span><br><span class="line">newUsedQty = 50 + 50 = 100</span><br></pre></td></tr></table></figure>
+
+<p>方案 B 是按完整请求数量更新：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">totalQty = 100</span><br><span class="line">usedQty = 50</span><br><span class="line">cancelledQty = 0</span><br><span class="line">requestQty = 80</span><br><span class="line">availableQty = 50</span><br><span class="line">newUsedQty = 50 + 80 = 130</span><br></pre></td></tr></table></figure>
+
+<p>两个方案都能解释“允许超额”，但业务含义完全不同。前者像是“只记录可用消耗”，后者才是“允许被超额占用”。如果这个问题不在设计阶段问清楚，后面写再多测试也只能测试一个错误前提。</p>
+<h2 id="第三步：把场景分类，而不是只列例子"><a href="#第三步：把场景分类，而不是只列例子" class="headerlink" title="第三步：把场景分类，而不是只列例子"></a>第三步：把场景分类，而不是只列例子</h2><p>澄清完关键规则后，scenario-thinking 会构建场景分类体系。好的分类不是随便列几个例子，而是要覆盖正常、边界、异常、多轮和组合场景。</p>
+<p>以“允许超额使用数量”这类需求为例，可以拆成这样：</p>
+<table>
+<thead>
+<tr>
+<th>场景类型</th>
+<th>需要验证的问题</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>向后兼容</td>
+<td>不传标识、标识为 false 时，旧逻辑是否完全不变</td>
+</tr>
+<tr>
+<td>新逻辑主流程</td>
+<td>标识为 true 且数量不足时，是否跳过原校验</td>
+</tr>
+<tr>
+<td>边界值</td>
+<td>可用数量为 0、刚好够、刚好不够、远超总量时怎么处理</td>
+</tr>
+<tr>
+<td>混合明细</td>
+<td>同一个请求中有的行允许超额，有的行严格校验时是否互不影响</td>
+</tr>
+<tr>
+<td>特殊类型</td>
+<td>不涉及原对象的特殊类型是否应该忽略该标识</td>
+</tr>
+<tr>
+<td>多次引用</td>
+<td>同一对象被多个明细引用时，数量是否按顺序累加</td>
+</tr>
+</tbody></table>
+<p>这就是 scenario-thinking 和普通问答最大的区别：它不满足于“这个例子怎么处理”，而是逼着 AI 建立一张场景地图。</p>
+<h2 id="第四步：每个场景都要完整推演"><a href="#第四步：每个场景都要完整推演" class="headerlink" title="第四步：每个场景都要完整推演"></a>第四步：每个场景都要完整推演</h2><p>场景分类之后，还不能只写结论。scenario-thinking 要求每个场景都写出完整推演过程，尤其是数值变化。</p>
+<p>一个合格的推演应该至少包含：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">数据准备：before 状态是什么</span><br><span class="line">入参：本次请求是什么</span><br><span class="line">计算过程：每个中间变量怎么算出来</span><br><span class="line">分支判断：走哪个 if/else，为什么</span><br><span class="line">最终输出：after 状态是什么，是否符合预期</span><br></pre></td></tr></table></figure>
+
+<p>举一个改写后的例子：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">场景：允许超额，且当前可用数量不足</span><br><span class="line"></span><br><span class="line">数据准备：</span><br><span class="line">totalQty = 100</span><br><span class="line">usedQty = 80</span><br><span class="line">cancelledQty = 10</span><br><span class="line">availableQty = 100 - 80 - 10 = 10</span><br><span class="line"></span><br><span class="line">入参：</span><br><span class="line">requestQty = 50</span><br><span class="line">allowOverUse = true</span><br><span class="line"></span><br><span class="line">推演：</span><br><span class="line">allowOverUse == true，因此跳过 availableQty &lt; requestQty 的失败校验</span><br><span class="line">newUsedQty = usedQty + requestQty = 80 + 50 = 130</span><br><span class="line">newAvailableQty = totalQty - newUsedQty - cancelledQty = 100 - 130 - 10 = -40</span><br><span class="line"></span><br><span class="line">结论：</span><br><span class="line">允许创建，且 after 状态出现负可用数量。</span><br><span class="line">这不是计算错误，而是该业务规则允许的超额占用结果。</span><br></pre></td></tr></table></figure>
+
+<p>这个推演过程的价值，是让实现阶段没有发挥空间。AI 后面写代码时，不能再自己决定“负数是不是要截断为 0”，因为设计里已经明确负数是业务允许的结果。</p>
+<h2 id="第五步：用户确认后再生成详设"><a href="#第五步：用户确认后再生成详设" class="headerlink" title="第五步：用户确认后再生成详设"></a>第五步：用户确认后再生成详设</h2><p>所有场景推演完以后，scenario-thinking 不会自动进入详细设计，而是要求用户确认。</p>
+<img src="../../../../images/scenario-thinking-workflow/thinking-apply-confirm.png" alt="推演完成后等待用户确认并触发 thinking-apply">
+
+<p>确认无误后，再输入：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/thinking-apply</span><br></pre></td></tr></table></figure>
+
+<p>这一步生成的详设通常应该包含：</p>
+<ul>
+<li>背景与问题描述；</li>
+<li>前提与约束；</li>
+<li>入参结构设计；</li>
+<li>核心算法规格和伪代码；</li>
+<li>与现有逻辑的衔接；</li>
+<li>全场景推演；</li>
+<li>修改范围清单；</li>
+<li>实现注意事项；</li>
+<li>推演汇总表。</li>
+</ul>
+<p>这里我觉得最有价值的是三个部分。</p>
+<p>第一是“前提与约束”。它把问答中确认过的业务规则收口，例如默认值如何处理、开关作用范围是什么、是否有上限、特殊类型是否受影响。</p>
+<p>第二是“全场景推演”。这部分不要压缩，因为它就是后续写测试和审查实现的依据。</p>
+<p>第三是“实现注意事项”。很多 bug 都藏在这里，比如 Boolean 的 null 处理、DTO 到领域对象的字段传递、同一对象多次引用时的累加顺序、旧数据反序列化兼容性。</p>
+<h2 id="一个更适合博客的实战模板"><a href="#一个更适合博客的实战模板" class="headerlink" title="一个更适合博客的实战模板"></a>一个更适合博客的实战模板</h2><p>为了避免把原始演示原样搬进来，这里把实战改写成一个通用模板：假设我们要改造一个订单占用接口，新增 <code>allowOverUse</code> 标识，允许请求数量超过当前可用数量。</p>
+<p>第一步，触发推演：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">/thinking 我打算在接口 createAllocation 中新增 allowOverUse 标识。</span><br><span class="line">当 allowOverUse 为 true 时，允许本次 requestQty 大于当前 availableQty。</span><br><span class="line">请先基于现有代码判断这是现有接口改造还是新功能，不要直接写代码。</span><br></pre></td></tr></table></figure>
+
+<p>第二步，确认复用模式。如果 AI 检测到 <code>createAllocation</code> 已有实现，选择“在现有功能基础上修改”。这会迫使它先读现有逻辑，而不是凭接口名猜。</p>
+<p>第三步，回答关键澄清问题。比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">allowOverUse 是明细行级，而不是请求级。</span><br><span class="line">null 和 false 都保持旧逻辑。</span><br><span class="line">true 时完全跳过可用数量校验。</span><br><span class="line">usedQty 按 requestQty 完整增加。</span><br><span class="line">不设置超额上限。</span><br><span class="line">特殊类型不涉及原对象占用，因此不受影响。</span><br></pre></td></tr></table></figure>
+
+<p>第四步，让 AI 生成场景矩阵。一个最小但够用的矩阵可以是：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>allowOverUse</th>
+<th align="right">availableQty</th>
+<th align="right">requestQty</th>
+<th>预期</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>旧逻辑正常</td>
+<td>false</td>
+<td align="right">60</td>
+<td align="right">50</td>
+<td>通过，usedQty 增加 50</td>
+</tr>
+<tr>
+<td>旧逻辑拦截</td>
+<td>false</td>
+<td align="right">10</td>
+<td align="right">50</td>
+<td>抛出数量不足异常</td>
+</tr>
+<tr>
+<td>新逻辑正常</td>
+<td>true</td>
+<td align="right">60</td>
+<td align="right">50</td>
+<td>跳过校验，usedQty 增加 50</td>
+</tr>
+<tr>
+<td>新逻辑超额</td>
+<td>true</td>
+<td align="right">10</td>
+<td align="right">50</td>
+<td>通过，usedQty 增加 50，可用变负</td>
+</tr>
+<tr>
+<td>可用为 0</td>
+<td>true</td>
+<td align="right">0</td>
+<td align="right">30</td>
+<td>通过，可用变负</td>
+</tr>
+<tr>
+<td>未传标识</td>
+<td>null</td>
+<td align="right">10</td>
+<td align="right">50</td>
+<td>按 false 处理，抛异常</td>
+</tr>
+<tr>
+<td>混合明细</td>
+<td>true&#x2F;false</td>
+<td align="right">10&#x2F;150</td>
+<td align="right">50&#x2F;30</td>
+<td>每行独立判断</td>
+</tr>
+</tbody></table>
+<p>第五步，确认推演后生成详设：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/thinking-apply</span><br></pre></td></tr></table></figure>
+
+<p>第六步，拿详设进入实现。这里可以接上一篇的流程：根据详设补测试，按修改范围最小化实现，最后做增量代码审查。</p>
+<h2 id="什么时候适合用-scenario-thinking"><a href="#什么时候适合用-scenario-thinking" class="headerlink" title="什么时候适合用 scenario-thinking"></a>什么时候适合用 scenario-thinking</h2><p>我会优先在这些场景使用它：</p>
+<ul>
+<li>改造已有接口或已有方法；</li>
+<li>业务规则看起来简单，但边界很多；</li>
+<li>涉及金额、数量、额度、库存、状态机；</li>
+<li>有“旧逻辑保持不变，新逻辑部分放开”的兼容要求；</li>
+<li>需要明确 null、0、负数、极大值、混合明细等边界；</li>
+<li>用户自己也不确定所有派生场景，需要 AI 帮忙追问。</li>
+</ul>
+<p>反过来，这些场景不太需要它：</p>
+<ul>
+<li>纯文案修改；</li>
+<li>简单字段透传且无业务分支；</li>
+<li>明确的 CRUD 页面或接口；</li>
+<li>已经有完整测试覆盖的小重构；</li>
+<li>需求目标本身还很发散，连业务对象都没确定。</li>
+</ul>
+<p>一句话判断就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">如果这个需求最难的地方是“写代码”，先走实现流程；</span><br><span class="line">如果最难的地方是“想清楚所有情况”，先走 scenario-thinking。</span><br></pre></td></tr></table></figure>
+
+<h2 id="它真正约束了什么"><a href="#它真正约束了什么" class="headerlink" title="它真正约束了什么"></a>它真正约束了什么</h2><p>scenario-thinking 表面上是在列场景，实际上是在约束 AI 的三个习惯。</p>
+<p>第一，约束“马上开始写”。看到 <code>/thinking</code> 后，AI 的第一动作应该是理解、搜索、确认和推演，而不是编辑代码。</p>
+<p>第二，约束“只覆盖主流程”。它要求正常、边界、异常、多轮、组合场景都被看见，尤其是旧逻辑兼容和新逻辑核心场景要同时覆盖。</p>
+<p>第三，约束“用模糊词带过”。每个数字都要能追溯到公式，结论不能只写“符合预期”，必须说明为什么符合。</p>
+<p>这也是它适合作为上一篇补充的原因。OpenSpec 和 Superpowers 让 AI 的开发流程更稳，scenario-thinking 则让 AI 在进入开发前先把复杂业务规则想清楚。前者解决“怎么交付”，后者解决“到底该交付什么行为”。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>上一篇讲的是完整流程：OpenSpec 产出规范，Superpowers 约束实现。<br>这一篇补充的是前置推演：scenario-thinking 把现有逻辑改造里的隐性边界挖出来。</p>
+<p>我现在更愿意把它放在二次开发的入口处：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">先 /thinking，把场景问清楚、推演清楚；</span><br><span class="line">再 /thinking-apply，把结论写成详设；</span><br><span class="line">最后把详设交给实现流程，写测试、改代码、做审查。</span><br></pre></td></tr></table></figure>
+
+<p>这样做不会让 AI 变得更“快”，但会让它少走很多看似聪明的弯路。对复杂业务系统来说，很多时候最省 token 的办法不是少写文档，而是别让错误前提进入代码。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/07/07/openspec-superpowers-workflow/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2026/07/07/openspec-superpowers-workflow/" class="post-title-link" itemprop="url">OpenSpec 和 Superpowers 怎么配合：给 AI 编码加一层流程护栏</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2026-07-07 23:11:18" itemprop="dateCreated datePublished" datetime="2026-07-07T23:11:18+08:00">2026-07-07</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2026-07-10 10:13:39" itemprop="dateModified" datetime="2026-07-10T10:13:39+08:00">2026-07-10</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>AI 编码用多了以后，很容易遇到一个微妙的问题：它确实能写代码，但不一定总是按我们希望的方式写。</p>
+<p>有时候需求还没澄清，它已经开始实现；有时候设计文档写得很完整，真正落代码时却只看任务清单；还有时候明明应该先写测试、先确认边界，它会为了“快点完成”直接跳到编码阶段。最后看起来是 AI 在提速，实际上 token 花了不少，人还要反复兜底。</p>
+<p>这篇文章想整理一种更稳的做法：把 <strong>OpenSpec</strong> 和 <strong>Superpowers</strong> 组合起来。OpenSpec 负责把需求变成结构化的设计产物，Superpowers 负责约束 AI 的工作纪律。两者合在一起，本质上是在 AI 和代码之间加了一层“流程护栏”。</p>
+<h2 id="为什么不是只用一个工具"><a href="#为什么不是只用一个工具" class="headerlink" title="为什么不是只用一个工具"></a>为什么不是只用一个工具</h2><p>OpenSpec 和 Superpowers 看起来有不少重叠：它们都会涉及需求分析、设计、任务拆解、执行和检查。但如果拆开看，两者的优势并不一样。</p>
+<p>OpenSpec 更像一个规范驱动开发框架。它擅长把一段需求拆成几个明确的 Markdown 产物：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">proposal.md：为什么做、做什么、影响范围是什么</span><br><span class="line">design.md：如何实现、架构怎么选、接口和数据怎么设计</span><br><span class="line">tasks.md：实现时分成哪些可执行任务</span><br><span class="line">spec.md：能力变化和验收场景</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，OpenSpec 的强项是让 AI 先把“需求意图”落到纸面上。它帮我们把模糊的一句话变成可以审查、可以讨论、可以追踪的设计资料。</p>
+<p>Superpowers 的侧重点则不同。它更像一套开发纪律：什么时候要先检查技能，什么时候要头脑风暴，什么时候必须先写测试，什么时候要做代码审查，什么时候不能直接相信审查意见。它关心的不是单个设计文档长什么样，而是 AI 在整个开发过程中有没有遵守专业工程流程。</p>
+<p>所以我更倾向于这样分工：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">OpenSpec：负责生成需求、设计、任务、规范这些“交付物”</span><br><span class="line">Superpowers：负责约束澄清、验证、测试、审查这些“过程”</span><br></pre></td></tr></table></figure>
+
+<p>如果只用 OpenSpec，风险是产物有了，但执行阶段仍可能发散。如果只用 Superpowers，流程很严谨，但需求到设计的结构化产物可能不够统一。把两者组合起来，才比较接近“先有设计，再按纪律交付”。</p>
+<h2 id="组合思路：做一个调度大脑"><a href="#组合思路：做一个调度大脑" class="headerlink" title="组合思路：做一个调度大脑"></a>组合思路：做一个调度大脑</h2><p>原材料里把这层调度规则叫“大脑”，这个说法很形象。它本质上就是一份结构化的 Markdown 规则，写清楚不同阶段应该调用哪类 Skill，以及每个阶段完成以后才能进入下一步。</p>
+<img src="../../../../images/openspec-superpowers-workflow/overall-brain.png" alt="OpenSpec 与 Superpowers 的整体组合思路">
+
+<p>这层“大脑”不需要把所有 Skill 都塞进流程。恰恰相反，越是想用流程节省 token，越不能什么都调用。比较实用的组合可以压缩成五个阶段：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Phase 1：OpenSpec 生成设计产物</span><br><span class="line">Phase 2：Superpowers 检查设计完整性和关键问题</span><br><span class="line">Phase 3：Superpowers 引入 TDD 或子代理约束</span><br><span class="line">Phase 4：OpenSpec 按设计和任务执行变更</span><br><span class="line">Phase 5：Superpowers 做增量代码审查和反馈处理</span><br></pre></td></tr></table></figure>
+
+<p>这里最关键的不是命令名称，而是阶段边界。比如 <code>/opsx:apply</code> 不应该被理解成“直接开始写代码”，而应该被理解成“进入完整实现流程”：先检查设计，再建立测试约束，再执行代码变更，最后审查。</p>
+<h2 id="第一阶段：先让-OpenSpec-产出可审查资料"><a href="#第一阶段：先让-OpenSpec-产出可审查资料" class="headerlink" title="第一阶段：先让 OpenSpec 产出可审查资料"></a>第一阶段：先让 OpenSpec 产出可审查资料</h2><p>一个好的 AI 开发流程，不应该从“帮我实现这个需求”直接跳到代码。更稳的起点是先让 OpenSpec 生成需求产物。</p>
+<p>例如可以把提示词写成这样：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">/opsx:propose 按需求文档完成后端接口调整。默认使用中文。</span><br><span class="line">当前只关注后端接口，前端内容可以忽略。</span><br><span class="line">请先生成 proposal、design、tasks 和 spec，不要直接修改代码。</span><br></pre></td></tr></table></figure>
+
+<p>这一步的目标不是让 AI 表演“已经理解了”，而是把它的理解暴露出来。只要有了 <code>proposal.md</code>、<code>design.md</code>、<code>tasks.md</code>、<code>spec.md</code>，用户就可以检查几个关键问题：</p>
+<ul>
+<li>需求范围有没有扩大；</li>
+<li>设计是否符合当前项目架构；</li>
+<li>任务拆分是否能逐项验证；</li>
+<li>是否有未确认的问题被 AI 默认补全；</li>
+<li>生成的 spec 是否真的能作为验收标准。</li>
+</ul>
+<img src="../../../../images/openspec-superpowers-workflow/openspec-artifacts.png" alt="OpenSpec 生成的设计产物目录">
+
+<p>这一步看似增加了成本，实际是在减少后续返工。因为 AI 最容易犯错的地方，往往不是语法，而是前提假设：它以为某个字段存在，以为某个接口可以改，以为某个边界不重要。设计产物就是用来提前暴露这些假设的。</p>
+<h2 id="第二阶段：用-Superpowers-检查设计，不急着实现"><a href="#第二阶段：用-Superpowers-检查设计，不急着实现" class="headerlink" title="第二阶段：用 Superpowers 检查设计，不急着实现"></a>第二阶段：用 Superpowers 检查设计，不急着实现</h2><p>OpenSpec 产物生成以后，不要立刻进入 <code>apply</code> 写代码。更好的做法是让 Superpowers 的 brainstorming 或类似流程介入，专门检查设计资料是否足够落地。</p>
+<p>这一步可以让 AI 重点检查三类问题：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">完整性：proposal、design、tasks、spec 是否都存在，内容是否互相对应</span><br><span class="line">可执行性：tasks 是否足够小，每个任务是否有明确输入输出</span><br><span class="line">风险点：哪些技术问题还没有证据，哪些业务边界还没确认</span><br></pre></td></tr></table></figure>
+
+<img src="../../../../images/openspec-superpowers-workflow/design-check.png" alt="Superpowers 对 OpenSpec 设计产物做完整性检查">
+
+<p>我觉得这一步是两套工具组合后最有价值的地方。OpenSpec 负责“生成设计”，Superpowers 负责“质疑设计”。这会把 AI 从“顺着自己刚写的文档继续往下编”拉回来，让它重新站在审查者视角看问题。</p>
+<p>如果设计里出现了未确认项，流程应该允许 AI 停下来问问题，而不是强行继续。比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">这个接口是否需要兼容旧字段？</span><br><span class="line">目标表中的字段名是否已经在真实数据库中验证？</span><br><span class="line">新增返回值为空时，前端是否接受 null？</span><br><span class="line">当前需求是否允许修改公共 DTO？</span><br></pre></td></tr></table></figure>
+
+<p>这些问题如果在编码前问清楚，可能只花几分钟；如果等代码写完再发现，就是一轮返工。</p>
+<h2 id="第三阶段：把-TDD-放在实现前面"><a href="#第三阶段：把-TDD-放在实现前面" class="headerlink" title="第三阶段：把 TDD 放在实现前面"></a>第三阶段：把 TDD 放在实现前面</h2><p>很多 AI 编码流程里，测试是最后才补的。这样的问题是：AI 已经写完实现，再让它补测试，它会天然倾向于证明自己写得对，而不是暴露实现的问题。</p>
+<p>Superpowers 的 TDD 约束可以把顺序倒过来：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">先根据 design.md 和 spec.md 写测试</span><br><span class="line">运行测试，确认失败原因是功能缺失</span><br><span class="line">再让实现阶段只写让测试通过的最小代码</span><br><span class="line">每完成一个任务，都运行对应测试</span><br></pre></td></tr></table></figure>
+
+<img src="../../../../images/openspec-superpowers-workflow/tdd-constraint.png" alt="TDD 阶段对实现前置约束">
+
+<p>在真实项目里，不一定所有需求都能做到理想化 TDD。老项目可能测试框架不完整，外部依赖很重，甚至很多接口没有现成测试样例。但即便如此，也应该保留“先定义可验证行为”的思路。最低限度也要写清楚：</p>
+<ul>
+<li>这次变更影响哪些输入输出；</li>
+<li>哪些场景必须覆盖；</li>
+<li>哪些旧行为不能破坏；</li>
+<li>运行什么命令能证明变更有效。</li>
+</ul>
+<p>对于任务比较大的需求，还可以让子代理按任务拆分工作：一个任务一个上下文，完成后再做两阶段审查。这样可以降低长上下文里互相污染的概率，也能减少“前面任务还没验收，后面任务已经堆上来”的失控感。</p>
+<h2 id="第四阶段：实现时必须回到设计"><a href="#第四阶段：实现时必须回到设计" class="headerlink" title="第四阶段：实现时必须回到设计"></a>第四阶段：实现时必须回到设计</h2><p>有一个很值得注意的改造点：OpenSpec 的实现 Skill 如果只参考 <code>tasks.md</code>，可能会忽略前面更完整的 <code>design.md</code>。这会导致任务做完了，但架构意图丢了。</p>
+<p>所以实现阶段应该明确要求 AI 同时读取：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">design.md：作为架构和接口设计蓝图</span><br><span class="line">tasks.md：作为执行顺序和工作清单</span><br><span class="line">spec.md：作为行为验收标准</span><br><span class="line">测试结果：作为代码必须满足的约束</span><br></pre></td></tr></table></figure>
+
+<img src="../../../../images/openspec-superpowers-workflow/implementation-status.png" alt="实现阶段的状态回报">
+
+<p>这里的关键原则是：<strong>tasks 只能告诉 AI 做什么，design 才能告诉 AI 为什么这样做。</strong></p>
+<p>如果只盯着任务清单，AI 很容易做出局部正确、整体不协调的代码。例如任务里写“新增字段”，它可能只在返回对象里加字段，却没有沿着 Mapper、Service、DTO、文档和测试一路检查。设计文档的价值，就是把调用链路、数据来源和边界条件固定下来。</p>
+<h2 id="第五阶段：代码审查不要变成礼貌性点头"><a href="#第五阶段：代码审查不要变成礼貌性点头" class="headerlink" title="第五阶段：代码审查不要变成礼貌性点头"></a>第五阶段：代码审查不要变成礼貌性点头</h2><p>实现完成后，最后一道门禁是代码审查。这里 Superpowers 里 <code>requesting-code-review</code> 和 <code>receiving-code-review</code> 的组合很有用。</p>
+<p>发起审查时，AI 不应该只说“帮我看看代码”，而应该把上下文说清楚：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">本次需求是什么</span><br><span class="line">参考了哪些 OpenSpec 产物</span><br><span class="line">修改了哪些文件</span><br><span class="line">哪些测试已经运行</span><br><span class="line">当前还有哪些疑虑</span><br></pre></td></tr></table></figure>
+
+<p>审查反馈回来以后，也不能看到建议就马上改。更稳的处理顺序是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">先完整阅读反馈</span><br><span class="line">再对照代码验证问题是否真实存在</span><br><span class="line">然后判断建议是否符合当前项目</span><br><span class="line">最后再决定修复、记录或有理有据地反驳</span><br></pre></td></tr></table></figure>
+
+<img src="../../../../images/openspec-superpowers-workflow/review-summary.png" alt="增量代码审查结果摘要">
+
+<p>这一点对 AI 尤其重要。因为 AI 很容易“表演性同意”：别人说得像是问题，它就立刻说“你说得对”。但代码审查不是情绪互动，而是技术判断。审查意见需要验证，修复动作也需要测试兜底。</p>
+<h2 id="实战案例"><a href="#实战案例" class="headerlink" title="实战案例"></a>实战案例</h2><p>假设我们要给一个后端查询接口补充一个返回字段。</p>
+<p>第一步，让 OpenSpec 只生成设计，不写代码：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">/opsx:propose 为订单详情查询接口新增 deliveryStatus 返回字段。</span><br><span class="line">字段来源于 order_delivery 表，通过 order_id 关联。</span><br><span class="line">要求保持旧接口兼容，不修改入参，不做前端改造。</span><br><span class="line">请先生成 proposal、design、tasks、spec。</span><br></pre></td></tr></table></figure>
+
+<p>第二步，人工检查 OpenSpec 产物。重点不是逐字润色，而是确认几个硬事实：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">字段来源是否明确</span><br><span class="line">关联关系是否可信</span><br><span class="line">空值如何处理</span><br><span class="line">是否影响已有调用方</span><br><span class="line">是否需要数据库变更</span><br><span class="line">测试场景是否覆盖正常、缺失关联、空结果</span><br></pre></td></tr></table></figure>
+
+<p>第三步，进入 apply，但不要直接实现：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">/opsx:apply 先检查 OpenSpec 产物完整性。</span><br><span class="line">如果存在未确认的技术问题，请先列出问题，不要直接写代码。</span><br></pre></td></tr></table></figure>
+
+<p>第四步，根据 AI 提出的问题补充上下文。比如确认字段名、表结构、空值策略、是否需要修改 API 文档。只有这些问题关掉以后，再进入 TDD 或最小验证设计。</p>
+<p>第五步，选择实现模式。小需求可以一次完整实现；大需求可以分阶段，比如先完成 DTO 和查询链路，再补测试和文档。这里不要为了“流程完整”而机械跑所有 Skill，流程是为了降低风险，不是为了制造仪式感。</p>
+<p>第六步，完成后做增量代码审查。审查范围只围绕本次变更，不扩散到无关重构。审查发现的问题要逐条验证，修复后重新跑对应测试。</p>
+<p>这样改写以后，实战部分就不再依赖某个具体项目、某个具体截图或某次模型实验，而是变成任何后端需求都能复用的流程模板。</p>
+<h2 id="组合这两套工具时要注意什么"><a href="#组合这两套工具时要注意什么" class="headerlink" title="组合这两套工具时要注意什么"></a>组合这两套工具时要注意什么</h2><p>第一，不要把所有 Skill 都接进来。Skill 越多，流程越重，token 消耗也越高。真正有价值的是按项目风险选择关键门禁：设计生成、设计检查、测试约束、增量实现、代码审查。</p>
+<p>第二，OpenSpec 的产物要按项目口味改造。比如项目如果强调 DDD，就应该要求 <code>design.md</code> 写清楚领域对象、应用服务、接口调用链路和出入参。如果项目更偏传统三层架构，就不要硬套复杂设计。</p>
+<p>第三，实现阶段必须引用设计文档。只看 <code>tasks.md</code> 会让 AI 变成任务执行器，看起来快，但容易丢掉架构约束。</p>
+<p>第四，Superpowers 的价值不在于“多问问题”，而在于阻止 AI 在证据不足时继续前进。好的流程应该允许 AI 说“这里还不确定，需要确认”，而不是永远假装能做。</p>
+<p>第五，不要把模型选择当成流程本身。模型能力当然重要，但稳定交付更依赖上下文质量、流程约束和验证手段。一个强模型如果没有流程，也可能写得很发散；一个普通模型如果被设计文档和测试约束住，反而能稳定完成边界清楚的任务。</p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>OpenSpec 和 Superpowers 的组合，可以理解成一句话：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">OpenSpec 负责把需求写清楚，Superpowers 负责让 AI 按清楚的需求做事。</span><br></pre></td></tr></table></figure>
+
+<p>这套流程最适合的场景，不是随手改一个变量名，而是那些“需求不算巨大，但有真实业务边界和代码风险”的日常开发任务。它会牺牲一点启动速度，但换来更清晰的设计、更少的发散、更可追踪的实现过程。</p>
+<p>对我来说，这也是 AI 编码从“会写代码”走向“能协作交付”的关键一步：不要只让 AI 输出结果，要让它暴露推理、接受检查、遵守流程，并且在每个关键阶段留下可验证的证据。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
     <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/06/18/ai-assisted-sql-n-plus-one-optimization/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1483,606 +2234,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/28/llm-basics-learning-notes/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/IMG_1578.jpeg">
-      <meta itemprop="name" content="Libra">
-      <meta itemprop="description" content="记录技术、项目与思考">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Libra's notes">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2026/05/28/llm-basics-learning-notes/" class="post-title-link" itemprop="url">大语言模型基础学习笔记：从预测下一个词到构建可靠应用</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-
-              <time title="创建时间：2026-05-28 18:17:34" itemprop="dateCreated datePublished" datetime="2026-05-28T18:17:34+08:00">2026-05-28</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">更新于</span>
-                <time title="修改时间：2026-06-09 16:41:03" itemprop="dateModified" datetime="2026-06-09T16:41:03+08:00">2026-06-09</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">分类于</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
-                </span>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>最近在补大语言模型的基础知识。刚开始看这类材料时，我很容易被一堆名词淹没：N-gram、RNN、LSTM、Transformer、Tokenizer、Scaling Laws、幻觉、RAG。它们看起来像是分散的技术点，但如果顺着一条主线看，其实会清楚很多。</p>
-<p>这条主线就是：语言模型本质上是在根据已有上下文预测下一个词元。模型能力的演进，基本都围绕“怎样更好地理解上下文、怎样更高效地学习语言规律、怎样更可靠地生成结果”展开。</p>
-<h2 id="一、先理解语言模型在做什么"><a href="#一、先理解语言模型在做什么" class="headerlink" title="一、先理解语言模型在做什么"></a>一、先理解语言模型在做什么</h2><p>语言模型的核心任务，是计算一个词序列出现的概率。换句话说，它要判断一句话在语言上是否自然，也要能根据前文推测后面最可能出现的内容。</p>
-<p>早期的统计语言模型会把一句话拆成多个条件概率相乘。例如，一个句子可以近似看成：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">P(w1, w2, ..., wm)</span><br><span class="line">= P(w1) * P(w2|w1) * ... * P(wm|w1, ..., wm-1)</span><br></pre></td></tr></table></figure>
-
-<p>直接计算完整历史几乎不可行，因为上下文组合太多，很多组合在语料里根本没出现过。于是 N-gram 模型引入了马尔可夫假设：预测当前词时，只看前面有限的几个词。</p>
-<p><img src="/images/llm-basics/1757249275674-0.png" alt="马尔可夫假设"></p>
-<p><em>图 1：N-gram 用有限上下文近似完整历史。</em></p>
-<p>例如 Bigram 只看前一个词，Trigram 只看前两个词。它的好处是简单、可解释，坏处也很明显：</p>
-<ol>
-<li>数据稀疏。没见过的词组概率容易被估成 0。</li>
-<li>泛化能力差。模型不知道 <code>agent</code> 和 <code>robot</code> 在语义上可能相近。</li>
-<li>上下文太短。窗口之外的信息会被直接丢掉。</li>
-</ol>
-<p>所以，语言模型需要从“数词频”走向“学表示”。</p>
-<h2 id="二、词嵌入：把离散的词放进连续空间"><a href="#二、词嵌入：把离散的词放进连续空间" class="headerlink" title="二、词嵌入：把离散的词放进连续空间"></a>二、词嵌入：把离散的词放进连续空间</h2><p>神经网络语言模型解决问题的第一步，是把词变成向量。词向量也叫词嵌入，它把每个词映射到一个高维连续空间里。语义相近的词，向量位置也会更接近。</p>
-<p><img src="/images/llm-basics/1757249275674-1.png" alt="神经网络语言模型"></p>
-<p><em>图 2：神经网络语言模型会在训练中学习词嵌入。</em></p>
-<p>有了词向量，模型就不再把词当成完全孤立的符号。它可以通过向量之间的距离或夹角理解相似性。经典例子是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">vector(&quot;king&quot;) - vector(&quot;man&quot;) + vector(&quot;woman&quot;) ≈ vector(&quot;queen&quot;)</span><br></pre></td></tr></table></figure>
-
-<p>这个例子不重要的是具体数字，重要的是它说明了一个思想：模型可以在向量空间中学到某些抽象关系，比如性别、身份、语义类别。</p>
-<p>但早期神经网络语言模型仍然有一个问题：上下文窗口通常是固定的。它比 N-gram 更会泛化，却还是不能很好地处理很长的依赖关系。</p>
-<h2 id="三、RNN-与-LSTM：给模型加上记忆"><a href="#三、RNN-与-LSTM：给模型加上记忆" class="headerlink" title="三、RNN 与 LSTM：给模型加上记忆"></a>三、RNN 与 LSTM：给模型加上记忆</h2><p>循环神经网络 RNN 的思路很自然：既然语言是一个序列，那模型就按顺序读，每读一个词就更新一次隐藏状态。这个隐藏状态可以理解成模型的短期记忆。</p>
-<p><img src="/images/llm-basics/1757249275674-2.png" alt="RNN 结构"></p>
-<p><em>图 3：RNN 通过隐藏状态在序列中传递信息。</em></p>
-<p>RNN 比固定窗口模型更灵活，因为它理论上可以把前面的信息一路传到后面。但实际训练时，它会遇到长期依赖问题。序列越长，反向传播路径越长，梯度就越容易消失或爆炸。结果是，模型很难真正记住很早之前的信息。</p>
-<p>LSTM 在 RNN 的基础上引入了细胞状态和门控机制。遗忘门决定丢掉什么，输入门决定写入什么，输出门决定暴露什么。这样一来，信息可以更稳定地在长序列里流动。</p>
-<p>不过，RNN 和 LSTM 都有一个绕不开的瓶颈：它们必须按顺序处理序列。第 t 步依赖第 t-1 步，天然不适合大规模并行训练。这也就引出了 Transformer。</p>
-<h2 id="四、Transformer：用注意力替代循环"><a href="#四、Transformer：用注意力替代循环" class="headerlink" title="四、Transformer：用注意力替代循环"></a>四、Transformer：用注意力替代循环</h2><p>Transformer 的关键变化，是抛弃循环结构，改用注意力机制来建模词元之间的关系。这样模型可以一次性看到整个序列，并并行计算不同位置之间的关联。</p>
-<p>最初的 Transformer 采用 Encoder-Decoder 架构，常见于机器翻译这类任务。</p>
-<p><img src="/images/llm-basics/1757249275674-3.png" alt="Transformer 架构"></p>
-<p><em>图 4：Transformer 由编码器和解码器组成。</em></p>
-<p>可以把它理解成两个角色：</p>
-<ol>
-<li>编码器负责理解输入，把每个词元变成带上下文信息的表示。</li>
-<li>解码器负责生成输出，根据已经生成的内容和编码器结果预测下一个词元。</li>
-</ol>
-<p>真正让 Transformer 强大的，是自注意力机制。</p>
-<h2 id="五、自注意力：让每个词主动寻找上下文"><a href="#五、自注意力：让每个词主动寻找上下文" class="headerlink" title="五、自注意力：让每个词主动寻找上下文"></a>五、自注意力：让每个词主动寻找上下文</h2><p>阅读一句话时，我们不会孤立地看每个词。例如看到 “The agent learns because it is intelligent” 里的 <code>it</code>，我们会自然回看前面的 <code>agent</code>。自注意力就是把这种“回看上下文”的过程数学化。</p>
-<p>每个词元会被映射成三个向量：</p>
-<ol>
-<li>Query：当前词要查询什么。</li>
-<li>Key：其他词能提供什么索引。</li>
-<li>Value：其他词实际携带什么信息。</li>
-</ol>
-<p>自注意力的计算可以简化成四步：</p>
-<ol>
-<li>用当前词的 Query 和所有词的 Key 计算相关性。</li>
-<li>对相关性分数做缩放，避免数值过大。</li>
-<li>用 Softmax 得到注意力权重。</li>
-<li>用这些权重对 Value 加权求和，得到当前词的新表示。</li>
-</ol>
-<p>公式写成：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Attention(Q, K, V) = softmax(QK^T / sqrt(dk))V</span><br></pre></td></tr></table></figure>
-
-<p>单头注意力只能从一个角度看上下文。多头注意力则像让多个观察者同时工作：有的头关注指代关系，有的头关注句法关系，有的头关注局部搭配。最后再把这些结果合并。</p>
-<p><img src="/images/llm-basics/1757249275674-4.png" alt="多头注意力"></p>
-<p><em>图 5：多头注意力让模型从多个表示空间理解上下文。</em></p>
-<p>Transformer 里还有几个重要组件：</p>
-<ol>
-<li>位置编码：自注意力本身不知道顺序，所以需要额外注入位置信息。</li>
-<li>前馈网络：对每个位置的表示继续做非线性变换，提取更高阶特征。</li>
-<li>残差连接：让深层网络里的梯度更容易传递。</li>
-<li>层归一化：稳定每一层的输入分布，提升训练稳定性。</li>
-</ol>
-<p>这些模块组合起来，才构成了现代大模型的基础骨架。</p>
-<h2 id="六、为什么很多大模型是-Decoder-Only"><a href="#六、为什么很多大模型是-Decoder-Only" class="headerlink" title="六、为什么很多大模型是 Decoder-Only"></a>六、为什么很多大模型是 Decoder-Only</h2><p>今天常见的生成式模型，大多可以按 Decoder-Only &#x2F; CausalLM 的思路来理解。以 Llama、Qwen 这类公开资料较多的模型为例，它们的核心目标就是预测下一个词元。GPT 系列、Claude、Gemini 这类闭源前沿模型通常不会完整公开内部架构，但从对话、代码生成、工具调用等使用方式看，也都属于“基于已有上下文持续生成下一步”的生成式范式。</p>
-<p>这个过程也叫自回归生成：</p>
-<ol>
-<li>用户给出一段输入。</li>
-<li>模型预测下一个最可能的词元。</li>
-<li>把刚生成的词元接回上下文。</li>
-<li>重复预测，直到生成完整回答或触发停止条件。</li>
-</ol>
-<p>这里有个关键细节：模型训练时不能偷看未来答案。所以 Decoder-Only 会使用掩码自注意力，把当前位置之后的词元遮住。这样模型在预测第 t 个词元时，只能依赖第 t 个词元之前的信息。</p>
-<p>Decoder-Only 架构简单、目标统一、容易扩展，也天然适合对话、写作、代码生成等任务。这也是它能成为通用大语言模型主流路线的重要原因。</p>
-<h2 id="七、和大模型交互：Prompt-与采样参数"><a href="#七、和大模型交互：Prompt-与采样参数" class="headerlink" title="七、和大模型交互：Prompt 与采样参数"></a>七、和大模型交互：Prompt 与采样参数</h2><p>理解模型结构之后，再看 Prompt 会更容易。提示词不是魔法，它本质上是在给模型提供上下文、任务边界和输出格式。</p>
-<p>常见提示方式可以按示例数量分成三类：</p>
-<ol>
-<li>零样本提示：只给任务，不给示例。</li>
-<li>单样本提示：给一个输入输出示例，让模型模仿格式。</li>
-<li>少样本提示：给多个示例，让模型理解边界和风格。</li>
-</ol>
-<p>指令调优之后，模型更擅长理解自然语言命令，所以我们可以直接写“请总结下面的内容”或者“请用 JSON 输出结果”。但在复杂任务里，示例依然很有用，尤其是格式抽取、分类、风格迁移这类场景。</p>
-<p>采样参数决定模型如何从概率分布里选择下一个词元：</p>
-<ol>
-<li>Temperature 控制随机性。低温度更稳定，高温度更发散。</li>
-<li>Top-k 只保留概率最高的 k 个候选词元。</li>
-<li>Top-p 保留累计概率达到 p 的最小候选集合。</li>
-</ol>
-<p>我的理解是：事实问答、代码生成、数据处理这类任务更适合低温度；头脑风暴、创意写作可以适当提高温度。Top-k 和 Top-p 通常不必同时调得很复杂，先从一个参数开始更容易观察效果。</p>
-<p>对于需要推理的问题，思维链提示也很常见。它的核心不是让模型“装作聪明”，而是让模型把中间步骤显式展开，方便我们检查它在哪一步出错。</p>
-<h2 id="八、Tokenizer：看不见但很重要的一层"><a href="#八、Tokenizer：看不见但很重要的一层" class="headerlink" title="八、Tokenizer：看不见但很重要的一层"></a>八、Tokenizer：看不见但很重要的一层</h2><p>模型不能直接处理自然语言，它实际处理的是 Token ID。分词器负责把文本切成词元，再映射成数字。</p>
-<p>最直观的分词方式有两种：</p>
-<ol>
-<li>按词切分：语义直观，但词表会非常大，也容易遇到未登录词。</li>
-<li>按字符切分：词表很小，但单个字符语义太弱，序列会变长。</li>
-</ol>
-<p>现代大模型普遍使用子词分词，在词和字符之间折中。常见词可以保留为完整词元，低频词可以拆成多个子词片段。</p>
-<p>BPE 是一种典型算法。它从字符级词表开始，每次合并出现频率最高的相邻片段，直到词表达到目标大小。</p>
-<p><img src="/images/llm-basics/1757249275674-5.png" alt="BPE 合并过程"></p>
-<p><em>图 6：BPE 通过不断合并高频片段构建词表。</em></p>
-<p>Tokenizer 对开发者很重要，原因有三个：</p>
-<ol>
-<li>上下文窗口按 Token 计算，不按汉字数、字符数或单词数计算。</li>
-<li>API 成本通常和输入输出 Token 数直接相关。</li>
-<li>分词结果会影响模型表现。同一段文本，多一个空格、大小写变化、符号变化，都可能切成不同的 Token 序列。</li>
-</ol>
-<p>所以写 Prompt 时，除了语义清楚，也要尽量保持格式稳定。</p>
-<h2 id="九、本地调用开源模型的意义"><a href="#九、本地调用开源模型的意义" class="headerlink" title="九、本地调用开源模型的意义"></a>九、本地调用开源模型的意义</h2><p>通过 API 调用大模型最方便，但本地部署开源模型也很值得学习。它能帮助我理解模型、分词器、显存、推理速度之间的关系，也适合隐私敏感或离线场景。</p>
-<p>使用 Hugging Face Transformers 时，最小实践路径大概是：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pip install transformers torch</span><br></pre></td></tr></table></figure>
-
-<p>然后用 <code>AutoTokenizer</code> 加载分词器，用 <code>AutoModelForCausalLM</code> 加载因果语言模型，再通过 <code>generate()</code> 生成结果。对于对话模型，还要注意使用对应的 chat template，把 system、user、assistant 这类角色格式化成模型训练时熟悉的输入格式。</p>
-<p>本地跑通一个小模型的意义，不在于它马上能替代线上模型，而在于能把“大模型调用”从黑盒变成半透明：输入如何变成 Token，Token 如何生成，输出如何解码，这些过程都会变得具体。</p>
-<h2 id="十、模型选型不要只看“最强”"><a href="#十、模型选型不要只看“最强”" class="headerlink" title="十、模型选型不要只看“最强”"></a>十、模型选型不要只看“最强”</h2><p>模型选型不是排行榜第一名就一定最好。实际项目里更常见的是在多个因素之间取舍：</p>
-<ol>
-<li>能力：推理、代码、中文、多模态、长文本，各模型侧重点不同。</li>
-<li>成本：闭源 API 按 Token 计费，开源部署则消耗硬件和运维成本。</li>
-<li>延迟：实时交互场景对响应速度非常敏感。</li>
-<li>上下文窗口：长文档、代码库分析、长期对话都依赖更大的上下文。</li>
-<li>部署方式：API 简单，本地部署更可控。</li>
-<li>生态：工具链、社区、微调方案和部署框架会影响开发效率。</li>
-<li>安全性：面向真实用户时，需要考虑幻觉、偏见、越权调用和敏感信息泄露。</li>
-</ol>
-<p>所以我更愿意把模型选型看成工程问题，而不是单纯的模型能力竞赛。先明确任务，再确定约束，最后才是比较模型。</p>
-<h2 id="十一、缩放法则与模型局限"><a href="#十一、缩放法则与模型局限" class="headerlink" title="十一、缩放法则与模型局限"></a>十一、缩放法则与模型局限</h2><p>大语言模型能力提升的背后，有一个重要经验规律：模型参数量、训练数据量和计算量增加时，模型损失通常会按可预测的趋势下降。这就是缩放法则。</p>
-<p>但后来的研究也提醒我们，不能只堆参数。给定计算预算时，模型大小和训练数据量需要匹配。一个参数更少、数据更充分的模型，可能比一个更大但训练不足的模型表现更好。</p>
-<p>模型变大后，还会出现一些小模型不明显的能力，比如更好的指令遵循、多步推理、代码生成和链式思考。但这并不意味着模型真正“无所不知”。它仍然有明显局限：</p>
-<ol>
-<li>幻觉：模型可能编造事实，并且表达得很自信。</li>
-<li>知识时效性：模型不知道训练数据之后发生的新事实。</li>
-<li>偏见：训练数据里的社会偏见可能被模型学习并放大。</li>
-<li>推理不稳定：复杂任务中，中间一步出错会影响最终答案。</li>
-</ol>
-<p>从应用角度看，缓解这些问题不能只靠“写一个更好的 Prompt”。更可靠的做法是给模型接入外部知识和工具，比如 RAG、搜索、计算器、代码执行器、数据库查询和人工审核流程。</p>
-<h2 id="十二、这次学习后的理解"><a href="#十二、这次学习后的理解" class="headerlink" title="十二、这次学习后的理解"></a>十二、这次学习后的理解</h2><p>读完这部分内容后，我对大语言模型的理解从“会聊天的黑盒”变得更具体了。</p>
-<p>从 N-gram 到词嵌入，是从统计计数走向语义表示；从 RNN 到 Transformer，是从顺序记忆走向并行注意力；从 Encoder-Decoder 到 Decoder-Only，是把生成任务统一成预测下一个词元；从 Prompt 到 Tokenizer，是理解我们如何把任务交给模型；从缩放法则到幻觉问题，则提醒我模型越强，工程约束和验证机制越重要。</p>
-<p>如果后续要继续学习智能体，这些基础会很有用。因为 Agent 的规划、记忆、工具调用和结果校验，最后都绕不开这些问题：模型看到了什么上下文，如何生成下一步，什么时候会不可靠，以及我们该如何把它放进一个更稳的系统里。</p>
-<p>后面我又单独整理了一篇补充笔记，用来区分 Encoder-only 和 Decoder-only 架构，以及自回归训练里的因果掩码细节：<a href="/2026/05/28/llm-architecture-encoder-decoder-notes/">大语言模型基础补充：Encoder-only 与 Decoder-only 到底差在哪</a>。</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/25/es-bulk-sync-threadpool-backpressure/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/IMG_1578.jpeg">
-      <meta itemprop="name" content="Libra">
-      <meta itemprop="description" content="记录技术、项目与思考">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Libra's notes">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2026/05/25/es-bulk-sync-threadpool-backpressure/" class="post-title-link" itemprop="url">千万级数据同步到 Elasticsearch：线程池、CountDownLatch 与背压控制</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-
-              <time title="创建时间：2026-05-25 22:56:37" itemprop="dateCreated datePublished" datetime="2026-05-25T22:56:37+08:00">2026-05-25</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">更新于</span>
-                <time title="修改时间：2026-06-09 17:02:23" itemprop="dateModified" datetime="2026-06-09T17:02:23+08:00">2026-06-09</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">分类于</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/%E5%90%8E%E7%AB%AF%E5%B7%A5%E7%A8%8B/" itemprop="url" rel="index"><span itemprop="name">后端工程</span></a>
-                </span>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>项目上线前，经常会遇到一个典型场景：业务数据已经在 MySQL 里沉淀了一段时间，现在需要一次性同步到 Elasticsearch 索引库中，方便后续做搜索和查询。</p>
-<p>如果数据量只有几万条，直接分页同步问题不大。但当数据量来到千万级，比如 1000 万条时，就不能简单地执行一次 <code>SELECT *</code> 把数据全部查出来。这样很容易让 Java 应用端内存被打爆，出现 <code>OOM</code>；同时长时间的大查询也会占住数据库连接，拖慢甚至影响线上数据库。</p>
-<p>比较稳妥的思路是：把大任务拆成很多小批次，再通过线程池并发处理，同时用 <code>CountDownLatch</code> 等待所有批次结束。真正关键的地方不只是“用了多线程”，而是要用有界队列和 <code>CallerRunsPolicy</code> 做背压，让同步速度始终被控制在数据库、应用和 ES 都能承受的范围内。</p>
-<h2 id="一、核心思路：分批读取，并发写入"><a href="#一、核心思路：分批读取，并发写入" class="headerlink" title="一、核心思路：分批读取，并发写入"></a>一、核心思路：分批读取，并发写入</h2><p>千万级数据同步的核心是“分而治之”。</p>
-<p>假设数据库里有 1000 万条数据，每个批次处理 5000 条，那么整个同步任务可以拆成：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">10000000 / 5000 = 2000 个批次任务</span><br></pre></td></tr></table></figure>
-
-<p>主线程只负责计算批次数，并把每个批次包装成一个任务提交给线程池。每个任务内部再完成三件事：</p>
-<ol>
-<li>从数据库读取当前批次的数据。</li>
-<li>把数据库实体转换成 ES 文档。</li>
-<li>通过 ES Bulk API 批量写入索引。</li>
-</ol>
-<p>这里有一个很重要的点：主线程提交给线程池的是任务对象，而不是一次性把 1000 万条数据读进内存。真正的数据读取发生在每个工作线程执行任务时，因此内存里同时存在的数据量会被线程数和批次大小限制住。</p>
-<h2 id="二、整体执行流程"><a href="#二、整体执行流程" class="headerlink" title="二、整体执行流程"></a>二、整体执行流程</h2><p>整个同步过程可以拆成四步。</p>
-<p>第一步，主线程先查询总数据量，并根据 <code>pageSize</code> 计算任务数量：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">totalCount = 10000000</span><br><span class="line">pageSize = 5000</span><br><span class="line">totalTasks = 2000</span><br></pre></td></tr></table></figure>
-
-<p>然后初始化 <code>CountDownLatch</code>：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">CountDownLatch</span> <span class="variable">latch</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">CountDownLatch</span>(totalTasks);</span><br></pre></td></tr></table></figure>
-
-<p>第二步，主线程循环提交任务。每个任务代表一个数据分片，比如：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">任务 1：offset = 0, limit = 5000</span><br><span class="line">任务 2：offset = 5000, limit = 5000</span><br><span class="line">任务 3：offset = 10000, limit = 5000</span><br></pre></td></tr></table></figure>
-
-<p>第三步，线程池里的工作线程并发消费这些任务。每个任务只处理自己的那一小段数据，处理完后在 <code>finally</code> 里执行 <code>latch.countDown()</code>。</p>
-<p>第四步，主线程提交完任务后调用 <code>latch.await()</code> 等待。当所有任务都完成，计数器从 2000 递减到 0，主线程被唤醒，同步流程结束。</p>
-<h2 id="三、代码骨架"><a href="#三、代码骨架" class="headerlink" title="三、代码骨架"></a>三、代码骨架</h2><p>一个简化后的实现大概如下：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">syncDataToES</span><span class="params">()</span> <span class="keyword">throws</span> InterruptedException &#123;</span><br><span class="line">    <span class="type">int</span> <span class="variable">totalCount</span> <span class="operator">=</span> mapper.selectTotalCount();</span><br><span class="line">    <span class="type">int</span> <span class="variable">pageSize</span> <span class="operator">=</span> <span class="number">5000</span>;</span><br><span class="line">    <span class="type">int</span> <span class="variable">totalTasks</span> <span class="operator">=</span> (totalCount + pageSize - <span class="number">1</span>) / pageSize;</span><br><span class="line"></span><br><span class="line">    <span class="type">CountDownLatch</span> <span class="variable">latch</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">CountDownLatch</span>(totalTasks);</span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> <span class="variable">workers</span> <span class="operator">=</span> Runtime.getRuntime().availableProcessors() * <span class="number">2</span>;</span><br><span class="line">    <span class="type">ThreadPoolExecutor</span> <span class="variable">executor</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ThreadPoolExecutor</span>(</span><br><span class="line">            workers,</span><br><span class="line">            workers,</span><br><span class="line">            <span class="number">60L</span>,</span><br><span class="line">            TimeUnit.SECONDS,</span><br><span class="line">            <span class="keyword">new</span> <span class="title class_">LinkedBlockingQueue</span>&lt;&gt;(<span class="number">200</span>),</span><br><span class="line">            <span class="keyword">new</span> <span class="title class_">ThreadFactoryBuilder</span>().setNameFormat(<span class="string">&quot;es-sync-pool-%d&quot;</span>).build(),</span><br><span class="line">            <span class="keyword">new</span> <span class="title class_">ThreadPoolExecutor</span>.CallerRunsPolicy()</span><br><span class="line">    );</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> <span class="variable">i</span> <span class="operator">=</span> <span class="number">0</span>; i &lt; totalTasks; i++) &#123;</span><br><span class="line">        <span class="keyword">final</span> <span class="type">int</span> <span class="variable">offset</span> <span class="operator">=</span> i * pageSize;</span><br><span class="line">        <span class="keyword">final</span> <span class="type">int</span> <span class="variable">limit</span> <span class="operator">=</span> pageSize;</span><br><span class="line"></span><br><span class="line">        executor.execute(() -&gt; &#123;</span><br><span class="line">            <span class="keyword">try</span> &#123;</span><br><span class="line">                List&lt;DataEntity&gt; list = mapper.selectByPage(offset, limit);</span><br><span class="line"></span><br><span class="line">                <span class="keyword">if</span> (CollectionUtils.isNotEmpty(list)) &#123;</span><br><span class="line">                    List&lt;EsDocument&gt; docs = convertToDocuments(list);</span><br><span class="line">                    esService.bulkIndex(docs);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">                log.error(<span class="string">&quot;同步 ES 分片失败, offset=&#123;&#125;, limit=&#123;&#125;&quot;</span>, offset, limit, e);</span><br><span class="line">                recordFailedBatch(offset, limit);</span><br><span class="line">            &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">                latch.countDown();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="type">boolean</span> <span class="variable">finished</span> <span class="operator">=</span> latch.await(<span class="number">2</span>, TimeUnit.HOURS);</span><br><span class="line">    <span class="keyword">if</span> (!finished) &#123;</span><br><span class="line">        log.error(<span class="string">&quot;ES 数据同步超时，部分任务可能未完成&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    executor.shutdown();</span><br><span class="line">    log.info(<span class="string">&quot;ES 数据同步任务结束&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>这段代码里最关键的不是分页查询本身，而是三个控制点：</p>
-<ol>
-<li><code>pageSize</code> 控制单个任务最多读取多少数据。</li>
-<li>有界队列控制最多允许多少任务在内存里排队。</li>
-<li><code>CallerRunsPolicy</code> 在队列满时让主线程自己执行任务，从而自动减速。</li>
-</ol>
-<h2 id="四、为什么它能避免-OOM"><a href="#四、为什么它能避免-OOM" class="headerlink" title="四、为什么它能避免 OOM"></a>四、为什么它能避免 OOM</h2><p>如果直接把 1000 万条数据全部查到内存里，内存压力会集中在一个瞬间爆发。</p>
-<p>分批同步后，内存上限就变得可控。假设线程池有 20 个工作线程，每个批次读取 5000 条数据，那么同一时刻正在被处理的数据大约是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">20 * 5000 = 100000 条</span><br></pre></td></tr></table></figure>
-
-<p>这和一次性加载 1000 万条完全不是一个量级。每个批次处理完成后，局部变量里的数据会失去引用，后续可以被 GC 回收。</p>
-<p>更重要的是，线程池队列必须是有界的。如果队列是无界的，主线程会非常快地把 2000 个任务全部塞进去。虽然任务对象本身不一定很大，但它会让系统失去节奏控制：生产任务的速度远远超过消费速度，后续如果任务里还捕获了上下文对象，就可能把内存慢慢推高。</p>
-<p>有界队列配合 <code>CallerRunsPolicy</code>，就能在消费端变慢时自动压住生产端。</p>
-<h2 id="五、CallerRunsPolicy-的背压控制"><a href="#五、CallerRunsPolicy-的背压控制" class="headerlink" title="五、CallerRunsPolicy 的背压控制"></a>五、CallerRunsPolicy 的背压控制</h2><p><code>CallerRunsPolicy</code> 的逻辑很简单，但效果非常关键。</p>
-<p>当线程池的工作线程都在忙，阻塞队列也满了，主线程再次调用 <code>executor.execute(task)</code> 时，这个任务不会被丢弃，也不会新开无限线程，而是由提交任务的线程自己执行。</p>
-<p>它的核心源码可以理解成这样：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">rejectedExecution</span><span class="params">(Runnable r, ThreadPoolExecutor executor)</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> (!executor.isShutdown()) &#123;</span><br><span class="line">        r.run();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>也就是说，原本只负责提交任务的主线程，会被迫停下来，亲自执行当前这个同步任务。</p>
-<p>这个过程会带来一个天然的时间差：</p>
-<ol>
-<li>主线程执行 <code>executor.execute(task)</code>。</li>
-<li>线程池发现队列已满，触发 <code>CallerRunsPolicy</code>。</li>
-<li>主线程同步执行 <code>task.run()</code>，开始查 MySQL、转换数据、写 ES。</li>
-<li>在主线程执行任务的这段时间里，它无法继续提交新任务。</li>
-<li>线程池里的工作线程仍然在消费队列中的任务。</li>
-<li>主线程执行完当前任务后，<code>executor.execute(task)</code> 返回，继续进入下一轮 <code>for</code> 循环。</li>
-</ol>
-<p>所以主线程不需要额外的通知机制。它执行完 <code>run()</code> 后，代码自然回到原来的循环位置，继续提交下一个任务。</p>
-<p>这就是背压：当 ES 写入变慢、数据库查询变慢、工作线程消费不过来时，主线程提交任务的速度也会自动变慢。</p>
-<p>还有一个细节：即使任务是主线程执行的，也会进入同一段 <code>Runnable</code> 代码，所以 <code>finally</code> 里的 <code>latch.countDown()</code> 同样会执行。只要 <code>countDown()</code> 放在 <code>finally</code> 里，就能避免某个批次异常后主线程一直等待。</p>
-<p>不过生产环境中仍然不建议使用无参的 <code>latch.await()</code>，最好带上超时时间：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">boolean</span> <span class="variable">finished</span> <span class="operator">=</span> latch.await(<span class="number">2</span>, TimeUnit.HOURS);</span><br></pre></td></tr></table></figure>
-
-<p>这样即使出现极端情况，也不会让同步程序永久卡死。</p>
-<h2 id="六、线程池应该怎么选"><a href="#六、线程池应该怎么选" class="headerlink" title="六、线程池应该怎么选"></a>六、线程池应该怎么选</h2><p>这种场景一般使用手动创建的 <code>ThreadPoolExecutor</code>，不建议直接使用 <code>Executors</code> 提供的快捷方法。</p>
-<p>原因在于：</p>
-<ol>
-<li><code>Executors.newFixedThreadPool()</code> 默认使用无界队列，背压很难触发。</li>
-<li><code>Executors.newCachedThreadPool()</code> 可能创建大量线程，容易把压力打到数据库和 ES 上。</li>
-<li>灌数任务需要明确控制线程数、队列长度、线程名称和拒绝策略。</li>
-</ol>
-<p>比较常见的配置是：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> <span class="variable">cpuCores</span> <span class="operator">=</span> Runtime.getRuntime().availableProcessors();</span><br><span class="line"><span class="type">int</span> <span class="variable">workers</span> <span class="operator">=</span> cpuCores * <span class="number">2</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">ThreadPoolExecutor</span> <span class="variable">executor</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ThreadPoolExecutor</span>(</span><br><span class="line">        workers,</span><br><span class="line">        workers,</span><br><span class="line">        <span class="number">60L</span>,</span><br><span class="line">        TimeUnit.SECONDS,</span><br><span class="line">        <span class="keyword">new</span> <span class="title class_">LinkedBlockingQueue</span>&lt;&gt;(<span class="number">200</span>),</span><br><span class="line">        <span class="keyword">new</span> <span class="title class_">ThreadFactoryBuilder</span>().setNameFormat(<span class="string">&quot;es-sync-pool-%d&quot;</span>).build(),</span><br><span class="line">        <span class="keyword">new</span> <span class="title class_">ThreadPoolExecutor</span>.CallerRunsPolicy()</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
-
-<p>这里通常把核心线程数和最大线程数设成一样。因为数据同步是典型的 I&#x2F;O 密集型任务，大量时间花在 MySQL 查询和 ES 网络写入上，线程不一定一直占用 CPU。适当多开一些线程，可以提高整体吞吐。</p>
-<p>队列大小则不能太大，也不能太小。</p>
-<p>如果队列太大，比如 10000，主线程很久都不会触发背压，系统会积压大量任务。如果队列太小，比如 10，又可能导致主线程频繁亲自执行任务，降低并发效率。一般可以从 100 到 500 之间开始压测，再根据数据库、ES 和应用内存表现调整。</p>
-<p>自定义线程名也很重要。线上如果出现同步卡住、ES 写入失败或者数据库连接耗尽，通过 <code>jstack</code>、日志和监控能快速定位到 <code>es-sync-pool-%d</code> 这批线程，而不是面对一堆默认的 <code>pool-1-thread-1</code>。</p>
-<h2 id="七、生产环境的几个坑"><a href="#七、生产环境的几个坑" class="headerlink" title="七、生产环境的几个坑"></a>七、生产环境的几个坑</h2><h3 id="1-不要忽略-MySQL-深分页"><a href="#1-不要忽略-MySQL-深分页" class="headerlink" title="1. 不要忽略 MySQL 深分页"></a>1. 不要忽略 MySQL 深分页</h3><p>示例代码里使用了 <code>offset + limit</code>，它适合理解流程，但在千万级数据下不一定适合生产。</p>
-<p>当偏移量来到 800 万时，类似下面的 SQL 会变得很慢：</p>
-<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">select</span> <span class="operator">*</span> <span class="keyword">from</span> table_name <span class="keyword">order</span> <span class="keyword">by</span> id limit <span class="number">8000000</span>, <span class="number">5000</span>;</span><br></pre></td></tr></table></figure>
-
-<p>因为 MySQL 需要扫描并跳过前面大量数据，再返回后面的 5000 条。</p>
-<p>如果主键是自增的，更推荐使用基于 ID 的滚动分页：</p>
-<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">select</span> <span class="operator">*</span></span><br><span class="line"><span class="keyword">from</span> table_name</span><br><span class="line"><span class="keyword">where</span> id <span class="operator">&gt;</span> #&#123;lastId&#125;</span><br><span class="line"><span class="keyword">order</span> <span class="keyword">by</span> id</span><br><span class="line">limit <span class="number">5000</span>;</span><br></pre></td></tr></table></figure>
-
-<p>这样每次都能沿着主键索引向后扫描，性能更稳定。</p>
-<h3 id="2-失败批次要能补偿"><a href="#2-失败批次要能补偿" class="headerlink" title="2. 失败批次要能补偿"></a>2. 失败批次要能补偿</h3><p>同步 2000 个批次时，只要有几个批次因为网络抖动、ES 瞬时拒绝写入或数据库超时失败，就可能造成索引数据缺失。</p>
-<p>所以 <code>catch</code> 里不能只打印日志。更稳妥的方式是把失败批次记录下来，例如写入失败表、Redis 或本地补偿文件，主流程结束后再进行二次重试。</p>
-<p>同时，写 ES 时最好保证幂等。比如使用数据库主键作为 ES 文档 <code>_id</code>，重复写入同一条数据时只是覆盖更新，而不是生成重复文档。</p>
-<h3 id="3-Bulk-大小要压测"><a href="#3-Bulk-大小要压测" class="headerlink" title="3. Bulk 大小要压测"></a>3. Bulk 大小要压测</h3><p>每批 5000 条只是一个经验值，不是固定答案。</p>
-<p>如果单条文档很大，5000 条可能会让单次 Bulk 请求过重，导致 ES 写入慢或者请求体过大。如果单条文档很小，批次太小又会导致网络请求过多，吞吐上不去。</p>
-<p>实际落地时要观察几个指标：</p>
-<ol>
-<li>单次 Bulk 请求耗时。</li>
-<li>ES 是否出现拒绝写入。</li>
-<li>JVM 堆内存和 GC 情况。</li>
-<li>MySQL 查询耗时和连接池占用。</li>
-</ol>
-<p>然后再调整 <code>pageSize</code>、线程数和队列长度。</p>
-<h3 id="4-数据库压力可能成为瓶颈"><a href="#4-数据库压力可能成为瓶颈" class="headerlink" title="4. 数据库压力可能成为瓶颈"></a>4. 数据库压力可能成为瓶颈</h3><p>线程池开到 <code>CPU * 2</code> 并不代表一定合适。它只是一个起点。</p>
-<p>如果压测发现 MySQL CPU 飙高、慢查询增多，或者连接池被打满，就要降低并发线程数，或者增大单批次大小，减少并发查询次数。同步任务的目标不是让应用跑满，而是让数据库、应用和 ES 形成稳定吞吐。</p>
-<h2 id="八、总结"><a href="#八、总结" class="headerlink" title="八、总结"></a>八、总结</h2><p>千万级数据同步到 Elasticsearch，重点不是简单地“开多线程”，而是建立一个可控的同步流水线。</p>
-<p><code>CountDownLatch</code> 解决的是主线程如何等待所有批次结束；<code>ThreadPoolExecutor</code> 解决的是并发执行；有界队列和 <code>CallerRunsPolicy</code> 解决的是生产速度过快时如何自动减速。</p>
-<p>一套比较完整的方案应该同时考虑：</p>
-<ol>
-<li>分批读取，避免一次性加载导致 OOM。</li>
-<li>有界线程池，限制并发和任务积压。</li>
-<li><code>CallerRunsPolicy</code>，在消费变慢时形成背压。</li>
-<li><code>CountDownLatch</code>，等待所有批次完成，并设置超时。</li>
-<li>ID 滚动分页，避免 MySQL 深分页问题。</li>
-<li>失败批次记录和重试，保证最终数据完整。</li>
-<li>使用数据库主键作为 ES <code>_id</code>，保证重复写入时具备幂等性。</li>
-</ol>
-<p>这样设计后，整个同步任务就不再是一次不可控的大查询，而是一批批可观察、可限流、可补偿的小任务。</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/23/distributed-route-tracing/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/IMG_1578.jpeg">
-      <meta itemprop="name" content="Libra">
-      <meta itemprop="description" content="记录技术、项目与思考">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Libra's notes">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2026/05/23/distributed-route-tracing/" class="post-title-link" itemprop="url">分布式路由追踪：从 TraceId 到跨线程透传</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-
-              <time title="创建时间：2026-05-23 22:23:59" itemprop="dateCreated datePublished" datetime="2026-05-23T22:23:59+08:00">2026-05-23</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">更新于</span>
-                <time title="修改时间：2026-06-09 16:41:03" itemprop="dateModified" datetime="2026-06-09T16:41:03+08:00">2026-06-09</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">分类于</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/%E5%90%8E%E7%AB%AF%E5%B7%A5%E7%A8%8B/" itemprop="url" rel="index"><span itemprop="name">后端工程</span></a>
-                </span>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>在排查线上问题时，最怕看到的是一串散落在不同机器、不同服务、不同线程里的日志：每一条看起来都和问题有关，但又很难串成一条完整的请求链路。</p>
-<p>分布式路由追踪要解决的就是这件事：给一次请求一个全局唯一的 <code>TraceId</code>，让它在网关、业务服务、RPC 调用、消息队列、异步线程之间一直传下去。这样排查问题时，就可以根据一个 <code>TraceId</code> 找到完整路径，再结合每个关键步骤的耗时和调用关系定位问题。</p>
-<h2 id="一、为什么需要-TraceId"><a href="#一、为什么需要-TraceId" class="headerlink" title="一、为什么需要 TraceId"></a>一、为什么需要 TraceId</h2><p>在单体项目里，请求通常只落在某一台机器上的某个进程里。只要日志里能打印出请求标识，基本就可以顺着日志找到整个执行过程。</p>
-<p>但在微服务环境下，一次请求可能会经过：</p>
-<ol>
-<li>网关。</li>
-<li>A 服务。</li>
-<li>B 服务。</li>
-<li>MQ 消费者。</li>
-<li>线程池里的异步任务。</li>
-</ol>
-<p>如果没有统一的追踪标识，这些日志就会分散在不同服务、不同机器甚至不同线程中。排查问题时只能到处搜索，效率很低。</p>
-<p>所以，最基础的做法是引入 <code>TraceId</code>。它代表一次完整请求。只要所有服务都把同一个 <code>TraceId</code> 打进日志，就能把散落的日志重新串起来。</p>
-<p>不过，只有 <code>TraceId</code> 还不够。它可以告诉我们“这些日志属于同一次请求”，但不一定能告诉我们“服务之间是如何调用的”。这时还需要 <code>SpanId</code>。</p>
-<h2 id="二、TraceId-和-SpanId-分别做什么"><a href="#二、TraceId-和-SpanId-分别做什么" class="headerlink" title="二、TraceId 和 SpanId 分别做什么"></a>二、TraceId 和 SpanId 分别做什么</h2><p>可以这样理解：</p>
-<ul>
-<li><code>TraceId</code>：标识一整条请求链路。</li>
-<li><code>SpanId</code>：标识链路中的某一次调用或某一个执行片段。</li>
-</ul>
-<p>比如一次请求从网关进入 A 服务，A 服务再调用 B 服务，B 服务又调用 C 服务。它们拥有同一个 <code>TraceId</code>，但每一次调用都应该有不同的 <code>SpanId</code>。</p>
-<p>一种常见的表示方式是：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">TraceId: 8f8b1d7c...</span><br><span class="line"></span><br><span class="line">网关入口: spanId = 0</span><br><span class="line">A 服务处理: spanId = 0.1</span><br><span class="line">A 调用 B: spanId = 0.1.1</span><br><span class="line">B 调用 C: spanId = 0.1.1.1</span><br></pre></td></tr></table></figure>
-
-<p>这样不仅能知道日志属于哪次请求，还能知道调用层级和先后关系。</p>
-<h2 id="三、先从单体场景做日志增强"><a href="#三、先从单体场景做日志增强" class="headerlink" title="三、先从单体场景做日志增强"></a>三、先从单体场景做日志增强</h2><p>在单体或集群部署的场景里，首先要解决的是“如何无侵入地打印追踪日志”。</p>
-<p>需求通常有两个：</p>
-<ol>
-<li>对业务代码尽量无侵入。</li>
-<li>对接口性能影响尽量小。</li>
-</ol>
-<p>无侵入可以通过切面编程实现。切面可以分成两类：</p>
-<ul>
-<li>静态代理：典型代表是 AspectJ，在编译期完成切面代码注入。</li>
-<li>动态代理：典型代表是 Spring AOP，在运行期生成代理对象，再通过代理和反射完成增强。</li>
-</ul>
-<p>如果只是做日志记录、限流、耗时统计这类通用增强，静态代理对运行时性能影响更小。动态代理虽然更灵活，但运行期生成代理类和反射调用会带来一定开销。</p>
-<p>一个简化后的切面逻辑大概是这样：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Aspect</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">Tracer</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Around(&quot;execution(public * com.example..*(..))&quot;)</span></span><br><span class="line">    <span class="keyword">public</span> Object <span class="title function_">trace</span><span class="params">(ProceedingJoinPoint pjp)</span> <span class="keyword">throws</span> Throwable &#123;</span><br><span class="line">        <span class="type">TraceContext</span> <span class="variable">traceContext</span> <span class="operator">=</span> TraceContext.get();</span><br><span class="line">        <span class="type">String</span> <span class="variable">traceId</span> <span class="operator">=</span> traceContext.getTraceId();</span><br><span class="line">        <span class="type">String</span> <span class="variable">signature</span> <span class="operator">=</span> pjp.getSignature().toShortString();</span><br><span class="line"></span><br><span class="line">        <span class="type">long</span> <span class="variable">start</span> <span class="operator">=</span> System.currentTimeMillis();</span><br><span class="line">        <span class="type">boolean</span> <span class="variable">success</span> <span class="operator">=</span> <span class="literal">false</span>;</span><br><span class="line">        <span class="type">String</span> <span class="variable">errorMessage</span> <span class="operator">=</span> <span class="string">&quot;&quot;</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            <span class="type">Object</span> <span class="variable">result</span> <span class="operator">=</span> pjp.proceed();</span><br><span class="line">            success = <span class="literal">true</span>;</span><br><span class="line">            <span class="keyword">return</span> result;</span><br><span class="line">        &#125; <span class="keyword">catch</span> (Throwable e) &#123;</span><br><span class="line">            errorMessage = e.getMessage();</span><br><span class="line">            <span class="keyword">throw</span> e;</span><br><span class="line">        &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">            <span class="type">long</span> <span class="variable">cost</span> <span class="operator">=</span> System.currentTimeMillis() - start;</span><br><span class="line">            log.info(</span><br><span class="line">                <span class="string">&quot;traceId=&#123;&#125;, signature=&#123;&#125;, cost=&#123;&#125;ms, success=&#123;&#125;, error=&#123;&#125;&quot;</span>,</span><br><span class="line">                traceId, signature, cost, success, errorMessage</span><br><span class="line">            );</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>这里的重点不是代码本身，而是思路：把请求标识、方法签名、开始时间、耗时、执行结果统一记录下来。</p>
-<p>如果并发量比较高，还要考虑日志量。假设系统有 <code>10000 QPS</code>，每个请求打印 10 条日志，每秒就会产生 10 万条日志，对磁盘 IO 压力很大。对于 <code>INFO</code> 级别日志，可以做采样，比如只记录 10%。对于异常日志，则应该尽量完整保留。</p>
-<p>还有一个实际问题：集群里有多台实例时，不知道某个 <code>TraceId</code> 的日志落在哪台机器上。如果每次都登录多台机器搜索，会很痛苦。更好的做法是把日志发送到消息队列，再由消费端写入 Elasticsearch。排查问题时直接在 ES 中按 <code>TraceId</code> 检索即可。</p>
-<h2 id="四、微服务场景：让-TraceId-在服务之间传递"><a href="#四、微服务场景：让-TraceId-在服务之间传递" class="headerlink" title="四、微服务场景：让 TraceId 在服务之间传递"></a>四、微服务场景：让 TraceId 在服务之间传递</h2><p>进入微服务后，问题变成了：一次请求跨越多个服务，<code>TraceId</code> 怎么传下去？</p>
-<p>基本流程是：</p>
-<ol>
-<li>网关收到外部请求时生成全局唯一的 <code>TraceId</code>。</li>
-<li>网关把 <code>TraceId</code> 放入请求 Header。</li>
-<li>业务服务的 Filter 拦截请求，从 Header 里解析 <code>TraceId</code>。</li>
-<li>服务把 <code>TraceId</code> 放入当前线程的 <code>RequestContext</code>。</li>
-<li>后续 RPC、MQ、异步任务继续从 <code>RequestContext</code> 中读取并透传。</li>
-</ol>
-<p><code>RequestContext</code> 通常基于 <code>ThreadLocal</code> 实现。这样当前请求线程里的业务代码都可以方便地获取 <code>TraceId</code>，而不需要在每个方法参数里显式传递。</p>
-<p>在服务之间传递时，常见场景有两类：RPC 调用和消息队列。</p>
-<h2 id="五、Dubbo-调用中的透传"><a href="#五、Dubbo-调用中的透传" class="headerlink" title="五、Dubbo 调用中的透传"></a>五、Dubbo 调用中的透传</h2><p>Dubbo 场景可以利用 Filter 统一处理。调用方在发起 RPC 前，从 <code>RequestContext</code> 中取出 <code>TraceId</code>，放入 Dubbo attachment；服务提供方收到请求后，再从 attachment 中取出 <code>TraceId</code>，写入自己的 <code>RequestContext</code>。</p>
-<p>调用方的核心逻辑可以理解成：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line"></span><br><span class="line"><span class="type">String</span> <span class="variable">traceId</span> <span class="operator">=</span> context.getTraceId();</span><br><span class="line"><span class="type">String</span> <span class="variable">tenantId</span> <span class="operator">=</span> String.valueOf(context.getTenantId());</span><br><span class="line"></span><br><span class="line">invocation.setAttachment(<span class="string">&quot;trace_id&quot;</span>, traceId);</span><br><span class="line">invocation.setAttachment(<span class="string">&quot;tenant_id&quot;</span>, tenantId);</span><br><span class="line"></span><br><span class="line"><span class="keyword">return</span> invoker.invoke(invocation);</span><br></pre></td></tr></table></figure>
-
-<p>服务提供方则反过来：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">String</span> <span class="variable">traceId</span> <span class="operator">=</span> invocation.getAttachment(<span class="string">&quot;trace_id&quot;</span>);</span><br><span class="line"><span class="type">String</span> <span class="variable">tenantId</span> <span class="operator">=</span> invocation.getAttachment(<span class="string">&quot;tenant_id&quot;</span>);</span><br><span class="line"></span><br><span class="line"><span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">context.setTraceId(traceId);</span><br><span class="line">context.setTenantId(Long.valueOf(tenantId));</span><br><span class="line"></span><br><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> invoker.invoke(invocation);</span><br><span class="line">&#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">    RequestContext.clear();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>这里还有一个细节：一定要在 <code>finally</code> 里清理上下文。线程池中的线程会被复用，如果不清理 <code>ThreadLocal</code>，下一次请求可能读到上一次请求遗留的数据，造成链路串线，甚至引发租户数据污染。</p>
-<p>MQ 的处理思路也类似：发送消息前把 <code>TraceId</code> 放到消息 Header 或消息属性里，消费消息时再取出来放入当前线程上下文。</p>
-<h2 id="六、真正麻烦的是服务内异步"><a href="#六、真正麻烦的是服务内异步" class="headerlink" title="六、真正麻烦的是服务内异步"></a>六、真正麻烦的是服务内异步</h2><p>服务之间的透传解决后，链路并不一定完整。因为同一个服务内部还可能有异步任务。</p>
-<p>比如业务代码里使用了线程池：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">executor.execute(() -&gt; &#123;</span><br><span class="line">    <span class="comment">// 异步执行的业务逻辑</span></span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
-
-<p><code>ThreadLocal</code> 的作用范围是当前线程。主线程中的 <code>RequestContext</code> 不会自动出现在子线程里，所以异步任务里可能拿不到 <code>TraceId</code>。这会导致链路在服务内部断掉。</p>
-<p>一个成熟方案是使用阿里的 <code>TransmittableThreadLocal</code>，它可以解决线程池复用场景下的上下文传递问题。但在已有系统中直接替换所有 <code>ThreadLocal</code> 风险比较大，需要大量回归测试，出了问题也会增加排查成本。</p>
-<p>因此可以借鉴它的思路，自己做一个更小范围的透传实现。</p>
-<p>核心原则是：</p>
-<ol>
-<li>提交任务时，从当前线程复制需要透传的字段。</li>
-<li>执行任务前，把这些字段设置到子线程的 <code>ThreadLocal</code>。</li>
-<li>任务执行结束后，清理子线程上下文。</li>
-</ol>
-<h2 id="七、用-TaskDecorator-包装线程池任务"><a href="#七、用-TaskDecorator-包装线程池任务" class="headerlink" title="七、用 TaskDecorator 包装线程池任务"></a>七、用 TaskDecorator 包装线程池任务</h2><p>如果项目统一使用 Spring 的 <code>ThreadPoolTaskExecutor</code>，可以通过 <code>TaskDecorator</code> 自动包装每一个提交到线程池的任务。</p>
-<p>简化后的结构如下：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Configuration</span></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ThreadPoolAutoConfiguration</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Bean</span></span><br><span class="line">    <span class="keyword">public</span> ThreadPoolTaskExecutor <span class="title function_">taskExecutor</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="type">ThreadPoolTaskExecutor</span> <span class="variable">executor</span> <span class="operator">=</span> <span class="keyword">new</span> <span class="title class_">ThreadPoolTaskExecutor</span>();</span><br><span class="line">        executor.setCorePoolSize(<span class="number">8</span>);</span><br><span class="line">        executor.setMaxPoolSize(<span class="number">32</span>);</span><br><span class="line">        executor.setTaskDecorator(<span class="keyword">new</span> <span class="title class_">AsyncTaskDecorator</span>());</span><br><span class="line">        executor.initialize();</span><br><span class="line">        <span class="keyword">return</span> executor;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">class</span> <span class="title class_">AsyncTaskDecorator</span> <span class="keyword">implements</span> <span class="title class_">TaskDecorator</span> &#123;</span><br><span class="line">        <span class="meta">@Override</span></span><br><span class="line">        <span class="keyword">public</span> Runnable <span class="title function_">decorate</span><span class="params">(Runnable runnable)</span> &#123;</span><br><span class="line">            <span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">new</span> <span class="title class_">ThreadPoolDecoratorTask</span>(context, runnable);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>包装任务时，在构造方法里保存主线程中的上下文：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">ThreadPoolDecoratorTask</span> <span class="keyword">implements</span> <span class="title class_">Runnable</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> Runnable target;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> String traceId;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> Long tenantId;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="title function_">ThreadPoolDecoratorTask</span><span class="params">(RequestContext context, Runnable target)</span> &#123;</span><br><span class="line">        <span class="built_in">this</span>.target = target;</span><br><span class="line">        <span class="built_in">this</span>.traceId = context.getTraceId();</span><br><span class="line">        <span class="built_in">this</span>.tenantId = context.getTenantId();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">run</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">        context.setTraceId(traceId);</span><br><span class="line">        context.setTenantId(tenantId);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            target.run();</span><br><span class="line">        &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">            RequestContext.clear();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>这个实现的关键点在于：<code>traceId</code> 和 <code>tenantId</code> 不是等到子线程执行时才读取，而是在任务提交时就从主线程复制出来，保存到包装对象的成员变量里。等任务真正运行时，再把这些值设置到执行线程的 <code>ThreadLocal</code> 中。</p>
-<p>这样对业务方基本无感。只要业务方使用平台统一提供的线程池，异步任务就能自动继承请求上下文。</p>
-<h2 id="八、兜底方案：手动包装-Runnable-或-Callable"><a href="#八、兜底方案：手动包装-Runnable-或-Callable" class="headerlink" title="八、兜底方案：手动包装 Runnable 或 Callable"></a>八、兜底方案：手动包装 Runnable 或 Callable</h2><p>现实里总会遇到一些不统一的写法，比如：</p>
-<ul>
-<li>直接 <code>new Thread(...)</code>。</li>
-<li>自定义线程池。</li>
-<li>使用 <code>CompletableFuture</code> 的默认线程池。</li>
-<li>接入了历史代码，不方便立即迁移到平台线程池。</li>
-</ul>
-<p>这类场景可以提供一个手动包装器，让业务方在提交任务前显式包装 <code>Runnable</code> 或 <code>Callable</code>。</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">RunnableWrapper</span> <span class="keyword">implements</span> <span class="title class_">Runnable</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> Runnable target;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> String traceId;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">final</span> Long tenantId;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">static</span> RunnableWrapper <span class="title function_">of</span><span class="params">(Runnable runnable)</span> &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="keyword">new</span> <span class="title class_">RunnableWrapper</span>(runnable);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">private</span> <span class="title function_">RunnableWrapper</span><span class="params">(Runnable target)</span> &#123;</span><br><span class="line">        <span class="built_in">this</span>.target = target;</span><br><span class="line"></span><br><span class="line">        <span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">        <span class="built_in">this</span>.traceId = context.getTraceId();</span><br><span class="line">        <span class="built_in">this</span>.tenantId = context.getTenantId();</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">run</span><span class="params">()</span> &#123;</span><br><span class="line">        <span class="type">RequestContext</span> <span class="variable">context</span> <span class="operator">=</span> RequestContext.get();</span><br><span class="line">        context.setTraceId(traceId);</span><br><span class="line">        context.setTenantId(tenantId);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            target.run();</span><br><span class="line">        &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">            RequestContext.clear();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>使用时类似这样：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">new</span> <span class="title class_">Thread</span>(RunnableWrapper.of(() -&gt; &#123;</span><br><span class="line">    <span class="comment">// 这里可以拿到 traceId</span></span><br><span class="line">&#125;)).start();</span><br></pre></td></tr></table></figure>
-
-<p>这不是最优雅的方式，但适合作为兜底方案。平台线程池解决主路径，手动包装解决特殊路径，两者结合可以让链路追踪覆盖得更完整。</p>
-<h2 id="九、一次完整链路可以这样串起来"><a href="#九、一次完整链路可以这样串起来" class="headerlink" title="九、一次完整链路可以这样串起来"></a>九、一次完整链路可以这样串起来</h2><p>把上面的内容合在一起，一次请求的追踪流程大概是：</p>
-<ol>
-<li>请求进入网关，网关生成 <code>TraceId</code>。</li>
-<li>网关把 <code>TraceId</code> 写入 Header，转发给业务服务。</li>
-<li>业务服务 Filter 解析 Header，写入 <code>RequestContext</code>。</li>
-<li>方法切面记录接口耗时、成功状态和异常信息。</li>
-<li>Dubbo 调用前把 <code>TraceId</code> 写入 attachment。</li>
-<li>Dubbo 服务提供方从 attachment 中恢复 <code>TraceId</code>。</li>
-<li>MQ 发送和消费时通过消息属性继续传递 <code>TraceId</code>。</li>
-<li>线程池任务通过 <code>TaskDecorator</code> 复制上下文。</li>
-<li>特殊异步任务使用 <code>RunnableWrapper</code> 或 <code>CallableWrapper</code> 手动透传。</li>
-<li>日志统一进入 MQ 和 ES，排查时按 <code>TraceId</code> 检索。</li>
-</ol>
-<p>这条链路里最重要的不是某一段代码，而是两个动作：入口处生成，边界处透传。</p>
-<p>入口包括网关、MQ 消费入口、定时任务入口等。边界包括 RPC、MQ、线程池、手动创建线程等。只要每个边界都处理好，<code>TraceId</code> 就不会轻易断。</p>
-<h2 id="十、总结"><a href="#十、总结" class="headerlink" title="十、总结"></a>十、总结</h2><p>分布式路由追踪的核心目标，是让一次请求在复杂系统里仍然保持“可观察”。</p>
-<p>在实现上，可以分层推进：</p>
-<ol>
-<li>用 AOP 记录方法耗时和执行结果，降低业务侵入。</li>
-<li>用日志采样和集中式检索降低 IO 与排查成本。</li>
-<li>用 <code>TraceId</code> 串联同一次请求的所有日志。</li>
-<li>用 <code>SpanId</code> 补充服务间调用关系。</li>
-<li>用 RPC Filter 和 MQ Header 解决跨服务传递。</li>
-<li>用线程池装饰器和任务包装器解决跨线程传递。</li>
-</ol>
-<p>真正容易出问题的地方，往往不是主流程，而是各种边界：服务调用边界、消息边界、线程边界。把这些边界守住，链路追踪才能从“日志里有个 ID”变成真正可用的排查工具。</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2154,7 +2305,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">11</span>
+          <span class="site-state-item-count">14</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
@@ -2167,7 +2318,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">28</span>
+        <span class="site-state-item-count">32</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
@@ -2210,7 +2361,7 @@
 </div>
 
 <div class="libra-footer-extra">
-  <span>共撰写了 11 篇文章</span>
+  <span>共撰写了 14 篇文章</span>
   <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
 </div>
 
