@@ -429,7 +429,7 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/07/07/scenario-thinking-workflow/">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/07/08/scenario-thinking-workflow/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="image" content="/images/IMG_1578.jpeg">
@@ -443,7 +443,7 @@
       <header class="post-header">
         <h2 class="post-title" itemprop="name headline">
           
-            <a href="/2026/07/07/scenario-thinking-workflow/" class="post-title-link" itemprop="url">补充篇：用 scenario-thinking 把二次开发先推演清楚</a>
+            <a href="/2026/07/08/scenario-thinking-workflow/" class="post-title-link" itemprop="url">补充篇：用 scenario-thinking 把二次开发先推演清楚</a>
         </h2>
 
         <div class="post-meta">
@@ -453,14 +453,14 @@
               </span>
               <span class="post-meta-item-text">发表于</span>
 
-              <time title="创建时间：2026-07-07 23:59:22" itemprop="dateCreated datePublished" datetime="2026-07-07T23:59:22+08:00">2026-07-07</time>
+              <time title="创建时间：2026-07-08 23:59:22" itemprop="dateCreated datePublished" datetime="2026-07-08T23:59:22+08:00">2026-07-08</time>
             </span>
               <span class="post-meta-item">
                 <span class="post-meta-item-icon">
                   <i class="far fa-calendar-check"></i>
                 </span>
                 <span class="post-meta-item-text">更新于</span>
-                <time title="修改时间：2026-07-08 00:01:52" itemprop="dateModified" datetime="2026-07-08T00:01:52+08:00">2026-07-08</time>
+                <time title="修改时间：2026-07-10 10:23:19" itemprop="dateModified" datetime="2026-07-10T10:23:19+08:00">2026-07-10</time>
               </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -619,7 +619,7 @@
 <p>第一是“前提与约束”。它把问答中确认过的业务规则收口，例如默认值如何处理、开关作用范围是什么、是否有上限、特殊类型是否受影响。</p>
 <p>第二是“全场景推演”。这部分不要压缩，因为它就是后续写测试和审查实现的依据。</p>
 <p>第三是“实现注意事项”。很多 bug 都藏在这里，比如 Boolean 的 null 处理、DTO 到领域对象的字段传递、同一对象多次引用时的累加顺序、旧数据反序列化兼容性。</p>
-<h2 id="一个更适合博客的实战模板"><a href="#一个更适合博客的实战模板" class="headerlink" title="一个更适合博客的实战模板"></a>一个更适合博客的实战模板</h2><p>为了避免把原始演示原样搬进来，这里把实战改写成一个通用模板：假设我们要改造一个订单占用接口，新增 <code>allowOverUse</code> 标识，允许请求数量超过当前可用数量。</p>
+<h2 id="实战案例"><a href="#实战案例" class="headerlink" title="实战案例"></a>实战案例</h2><p>假设我们要改造一个订单占用接口，新增 <code>allowOverUse</code> 标识，允许请求数量超过当前可用数量。</p>
 <p>第一步，触发推演：</p>
 <figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">/thinking 我打算在接口 createAllocation 中新增 allowOverUse 标识。</span><br><span class="line">当 allowOverUse 为 true 时，允许本次 requestQty 大于当前 availableQty。</span><br><span class="line">请先基于现有代码判断这是现有接口改造还是新功能，不要直接写代码。</span><br></pre></td></tr></table></figure>
 
