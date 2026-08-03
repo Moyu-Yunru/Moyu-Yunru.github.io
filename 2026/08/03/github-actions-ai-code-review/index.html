@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 8.1.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"moyu-yunru.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":"utterances","storage":true,"lazyload":false,"nav":null,"activeClass":"utterances"},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="代码评审是研发流程里很重要的一环，但它也很容易因为时间紧、提交频繁而变成一句“看起来没问题”。如果能在代码推送后自动提取变更、调用大模型分析，并把结果归档下来，就可以先让机器完成一轮稳定的基础检查，再由开发者把注意力放到业务逻辑和架构决策上。 openai-code-review 就是围绕这个思路实现的一个 Java 组件。它目前以 GitHub Actions 作为执行入口：代码发生变更后，Wo">
+<meta property="og:type" content="article">
+<meta property="og:title" content="把 AI 代码评审接入 GitHub Actions：从提交 Diff 到微信通知">
+<meta property="og:url" content="https://moyu-yunru.github.io/2026/08/03/github-actions-ai-code-review/index.html">
+<meta property="og:site_name" content="Libra&#39;s notes">
+<meta property="og:description" content="代码评审是研发流程里很重要的一环，但它也很容易因为时间紧、提交频繁而变成一句“看起来没问题”。如果能在代码推送后自动提取变更、调用大模型分析，并把结果归档下来，就可以先让机器完成一轮稳定的基础检查，再由开发者把注意力放到业务逻辑和架构决策上。 openai-code-review 就是围绕这个思路实现的一个 Java 组件。它目前以 GitHub Actions 作为执行入口：代码发生变更后，Wo">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-08-03T12:30:00.000Z">
+<meta property="article:modified_time" content="2026-08-03T13:40:56.280Z">
+<meta property="article:author" content="Libra">
+<meta property="article:tag" content="AI代码评审">
+<meta property="article:tag" content="GitHub Actions">
+<meta property="article:tag" content="Java">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://moyu-yunru.github.io/2026/08/03/github-actions-ai-code-review/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>把 AI 代码评审接入 GitHub Actions：从提交 Diff 到微信通知 | Libra's notes</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Libra's notes</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">A place to record my thoughts</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-文章">
+
+    <a href="/blog/" rel="section"><i class="fa fa-book fa-fw"></i>文章</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+  <a href="https://github.com/Moyu-Yunru/Moyu-Yunru.github.io" class="github-corner" title="MoyuYunru GitHub" aria-label="MoyuYunru GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/08/03/github-actions-ai-code-review/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          把 AI 代码评审接入 GitHub Actions：从提交 Diff 到微信通知
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2026-08-03 20:30:00 / 修改时间：21:40:56" itemprop="dateCreated datePublished" datetime="2026-08-03T20:30:00+08:00">2026-08-03</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
+                </span>
+            </span>
+
+          
+            <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-eye"></i>
+              </span>
+              <span class="post-meta-item-text">阅读次数：</span>
+              <span id="busuanzi_value_page_pv"></span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>代码评审是研发流程里很重要的一环，但它也很容易因为时间紧、提交频繁而变成一句“看起来没问题”。如果能在代码推送后自动提取变更、调用大模型分析，并把结果归档下来，就可以先让机器完成一轮稳定的基础检查，再由开发者把注意力放到业务逻辑和架构决策上。</p>
+<p><code>openai-code-review</code> 就是围绕这个思路实现的一个 Java 组件。它目前以 GitHub Actions 作为执行入口：代码发生变更后，Workflow 下载并运行 SDK，SDK 获取最近一次提交的 <code>git diff</code>，调用 ChatGLM 生成 Markdown 评审报告，将报告提交到独立的 GitHub 日志仓库，最后通过微信公众号模板消息发送通知。</p>
+<p>这篇文章会介绍组件当前的工作原理、完整接入过程、微信通知的特殊处理，以及后续如何把通知能力改造成可插拔接口。</p>
+<h2 id="一、组件解决了什么问题"><a href="#一、组件解决了什么问题" class="headerlink" title="一、组件解决了什么问题"></a>一、组件解决了什么问题</h2><p>传统代码评审一般依赖开发者主动创建 Pull Request，再由团队成员逐行检查。人工评审不可替代，但一些重复性问题很适合先交给大模型处理，例如：</p>
+<ul>
+<li>是否存在明显的逻辑漏洞和边界条件遗漏。</li>
+<li>异常处理、资源释放和空值判断是否完整。</li>
+<li>命名、注释与代码结构是否清晰。</li>
+<li>是否存在潜在性能瓶颈或安全风险。</li>
+<li>能否给出具体的修改建议和参考代码。</li>
+</ul>
+<p>组件把这一步放到了持续集成流程中。一次完整执行可以概括为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">代码 push 或 Pull Request</span><br><span class="line">        ↓</span><br><span class="line">GitHub Actions 检出代码并准备 JDK</span><br><span class="line">        ↓</span><br><span class="line">下载并运行 openai-code-review-sdk JAR</span><br><span class="line">        ↓</span><br><span class="line">读取最近一次提交的 git diff</span><br><span class="line">        ↓</span><br><span class="line">调用 ChatGLM 生成 Markdown 评审报告</span><br><span class="line">        ↓</span><br><span class="line">将报告提交到独立的 GitHub 日志仓库</span><br><span class="line">        ↓</span><br><span class="line">发送微信公众号模板消息</span><br></pre></td></tr></table></figure>
+
+<p>这样做有两个直接好处。第一，评审过程不依赖开发者本地环境，只要代码进入远端仓库就可以自动执行。第二，报告不会只停留在 Actions 日志里，而是按日期保存到专门的仓库中，便于回溯某次提交的评审结果。</p>
+<h2 id="二、项目结构与核心设计"><a href="#二、项目结构与核心设计" class="headerlink" title="二、项目结构与核心设计"></a>二、项目结构与核心设计</h2><p>项目采用 Maven 多模块结构：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">openai-code-review</span><br><span class="line">├── openai-code-review-sdk     # 核心 SDK，可打包成独立可执行 JAR</span><br><span class="line">└── openai-code-review-test    # Spring Boot 测试应用</span><br></pre></td></tr></table></figure>
+
+<p>SDK 内部又按职责划分为几个部分：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>domain/service</code></td>
+<td>编排代码评审的完整业务流程</td>
+</tr>
+<tr>
+<td><code>infrastructure/git</code></td>
+<td>获取 diff、克隆日志仓库、提交并推送报告</td>
+</tr>
+<tr>
+<td><code>infrastructure/openai</code></td>
+<td>调用大模型接口，当前实现为 ChatGLM</td>
+</tr>
+<tr>
+<td><code>infrastructure/weixin</code></td>
+<td>获取微信 Access Token 并发送模板消息</td>
+</tr>
+<tr>
+<td><code>types/utils</code></td>
+<td>Token、随机字符串等通用工具</td>
+</tr>
+</tbody></table>
+<p>评审主流程使用了模板方法模式。抽象服务规定四个步骤，具体服务负责实现：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">exec</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="comment">// 第一步：读取当前仓库最近一次提交产生的代码差异。</span></span><br><span class="line">    <span class="type">String</span> <span class="variable">diffCode</span> <span class="operator">=</span> getDiffCode();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 第二步：把 diff 交给大模型，生成 Markdown 格式的评审内容。</span></span><br><span class="line">    <span class="type">String</span> <span class="variable">recommend</span> <span class="operator">=</span> codeReview(diffCode);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 第三步：将报告写入日志仓库，并取得可以访问报告的地址。</span></span><br><span class="line">    <span class="type">String</span> <span class="variable">logUrl</span> <span class="operator">=</span> recordCodeReview(recommend);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 第四步：把项目、分支、作者和报告地址发送给通知渠道。</span></span><br><span class="line">    pushMessage(logUrl);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>大模型部分已经通过 <code>IOpenAI</code> 接口隔离。当前使用 ChatGLM，后续如果要接入其他兼容服务，可以新增实现类，而不必重写 Git 操作和流程编排。这种设计思路同样适合后面要讨论的通知模块。</p>
+<h2 id="三、为什么当前主要依赖-GitHub-Actions"><a href="#三、为什么当前主要依赖-GitHub-Actions" class="headerlink" title="三、为什么当前主要依赖 GitHub Actions"></a>三、为什么当前主要依赖 GitHub Actions</h2><p>SDK 本身是一个可执行 JAR，但它需要有人在合适的时机准备代码仓库和环境变量，然后启动它。当前这个“执行器”就是 GitHub Actions。</p>
+<p>Workflow 主要承担五项职责：</p>
+<ol>
+<li>监听 <code>push</code> 和 <code>pull_request</code> 事件。</li>
+<li>检出代码，并保留足够的 Git 历史用于计算 diff。</li>
+<li>准备 Java 运行环境并下载 SDK JAR。</li>
+<li>从 GitHub 上下文和 Git 命令中提取项目、分支、作者与提交信息。</li>
+<li>将 GitHub Secrets 转换成 SDK 需要的环境变量。</li>
+</ol>
+<p>因此，这个组件并非只能在 GitHub 上运行，但当前接入模板、元数据提取、密钥管理和报告链接都围绕 GitHub 编写。如果换到 GitLab CI、Gitee Go、Jenkins 或其他平台，需要针对平台事件模型和环境变量做适配，不能原样复制 GitHub Workflow。</p>
+<h2 id="四、接入前需要准备的资源"><a href="#四、接入前需要准备的资源" class="headerlink" title="四、接入前需要准备的资源"></a>四、接入前需要准备的资源</h2><p>在业务仓库接入前，需要准备以下内容：</p>
+<table>
+<thead>
+<tr>
+<th>资源</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>待评审代码仓库</td>
+<td>触发自动评审的业务项目</td>
+</tr>
+<tr>
+<td>评审日志仓库</td>
+<td>保存大模型生成的 Markdown 报告</td>
+</tr>
+<tr>
+<td>GitHub Token</td>
+<td>允许 SDK 向日志仓库提交文件</td>
+</tr>
+<tr>
+<td>ChatGLM API Key</td>
+<td>调用大模型生成评审结果</td>
+</tr>
+<tr>
+<td>微信公众号配置</td>
+<td>接收评审完成通知，当前版本形式上必填</td>
+</tr>
+<tr>
+<td>GitHub Actions Workflow</td>
+<td>触发并运行评审组件</td>
+</tr>
+</tbody></table>
+<p>当前发布的 SDK JAR 地址是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://github.com/Moyu-Yunru/openai-code-review-log/releases/download/v1.0/openai-code-review-sdk-1.0.jar</span><br></pre></td></tr></table></figure>
+
+<p>这里必须使用 <code>/releases/download/</code> 对应的资产下载地址。<code>/releases/tag/</code> 是展示 Release 的网页，如果把网页地址当成 JAR 下载，运行时会遇到 <code>Invalid or corrupt jarfile</code>。</p>
+<h2 id="五、创建评审日志仓库和访问令牌"><a href="#五、创建评审日志仓库和访问令牌" class="headerlink" title="五、创建评审日志仓库和访问令牌"></a>五、创建评审日志仓库和访问令牌</h2><p>评审报告不会写回业务代码仓库，而是统一保存到一个独立仓库，例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://github.com/Moyu-Yunru/openai-code-review-log</span><br></pre></td></tr></table></figure>
+
+<p>配置日志仓库地址时不要带 <code>.git</code> 后缀，SDK 会在克隆时自行补充。报告生成后会按日期创建目录，再以项目、分支、作者、时间戳和随机数组合文件名。</p>
+<p>GitHub Token 推荐使用 fine-grained token，只给日志仓库开放必要权限：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Contents: Read and write</span><br><span class="line">Metadata: Read-only</span><br></pre></td></tr></table></figure>
+
+<p>如果使用 classic token，则需要具备相应仓库的 <code>repo</code> 权限。Token、模型 Key 和微信 Secret 都只能放在 Actions Secrets 中，不要直接写入 Workflow 或提交到代码仓库。</p>
+<h2 id="六、准备-ChatGLM-与微信配置"><a href="#六、准备-ChatGLM-与微信配置" class="headerlink" title="六、准备 ChatGLM 与微信配置"></a>六、准备 ChatGLM 与微信配置</h2><p>当前模型实现使用 ChatGLM，请求地址和 Key 通过环境变量注入：</p>
+<table>
+<thead>
+<tr>
+<th>配置项</th>
+<th>示例或格式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CHATGLM_APIHOST</code></td>
+<td><code>https://open.bigmodel.cn/api/paas/v4/chat/completions</code></td>
+</tr>
+<tr>
+<td><code>CHATGLM_APIKEYSECRET</code></td>
+<td><code>{id}.{secret}</code></td>
+</tr>
+</tbody></table>
+<p><code>CHATGLM_APIHOST</code> 必须包含协议头，Secret 的值也不要额外包一层引号，否则可能出现 <code>MalformedURLException: no protocol</code> 或鉴权失败。</p>
+<p>微信通知需要四项配置：</p>
+<table>
+<thead>
+<tr>
+<th>配置项</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>WEIXIN_APPID</code></td>
+<td>公众号或测试号 AppID</td>
+</tr>
+<tr>
+<td><code>WEIXIN_SECRET</code></td>
+<td>公众号或测试号 Secret</td>
+</tr>
+<tr>
+<td><code>WEIXIN_TOUSER</code></td>
+<td>接收者 OpenID</td>
+</tr>
+<tr>
+<td><code>WEIXIN_TEMPLATE_ID</code></td>
+<td>模板消息 ID</td>
+</tr>
+</tbody></table>
+<p>模板变量必须与 SDK 保持一致：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">项目：&#123;&#123;repo_name.DATA&#125;&#125;</span><br><span class="line">分支：&#123;&#123;branch_name.DATA&#125;&#125;</span><br><span class="line">作者：&#123;&#123;commit_author.DATA&#125;&#125;</span><br><span class="line">说明：&#123;&#123;commit_message.DATA&#125;&#125;</span><br></pre></td></tr></table></figure>
+
+<p>特别要注意作者字段是 <code>commit_author</code>，不是 <code>author_name</code>。变量名不一致时，Actions 可能已经执行完成，但微信消息中的对应内容不会正常显示。</p>
+<h2 id="七、在业务仓库配置-GitHub-Secrets"><a href="#七、在业务仓库配置-GitHub-Secrets" class="headerlink" title="七、在业务仓库配置 GitHub Secrets"></a>七、在业务仓库配置 GitHub Secrets</h2><p>进入待评审仓库的以下位置：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Settings -&gt; Secrets and variables -&gt; Actions -&gt; New repository secret</span><br></pre></td></tr></table></figure>
+
+<p>添加这些 Secrets：</p>
+<table>
+<thead>
+<tr>
+<th>Secret 名称</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CODE_REVIEW_LOG_URI</code></td>
+<td>日志仓库地址，不带 <code>.git</code></td>
+</tr>
+<tr>
+<td><code>CODE_TOKEN</code></td>
+<td>对日志仓库有写权限的 GitHub Token</td>
+</tr>
+<tr>
+<td><code>CHATGLM_APIHOST</code></td>
+<td>ChatGLM API 地址</td>
+</tr>
+<tr>
+<td><code>CHATGLM_APIKEYSECRET</code></td>
+<td>ChatGLM API Key</td>
+</tr>
+<tr>
+<td><code>WEIXIN_APPID</code></td>
+<td>微信 AppID</td>
+</tr>
+<tr>
+<td><code>WEIXIN_SECRET</code></td>
+<td>微信 Secret</td>
+</tr>
+<tr>
+<td><code>WEIXIN_TOUSER</code></td>
+<td>接收者 OpenID</td>
+</tr>
+<tr>
+<td><code>WEIXIN_TEMPLATE_ID</code></td>
+<td>微信模板 ID</td>
+</tr>
+</tbody></table>
+<p>Secret 名称和 SDK 读取的环境变量名称并不完全相同，二者在 Workflow 的 <code>env</code> 中完成映射。例如 <code>CODE_TOKEN</code> 最终映射为 <code>GITHUB_TOKEN</code>。</p>
+<h2 id="八、添加-GitHub-Actions-Workflow"><a href="#八、添加-GitHub-Actions-Workflow" class="headerlink" title="八、添加 GitHub Actions Workflow"></a>八、添加 GitHub Actions Workflow</h2><p>在业务仓库中新建：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">.github/workflows/main-remote-jar.yml</span><br></pre></td></tr></table></figure>
+
+<p>下面是当前远程 JAR 接入方式的核心配置：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">name:</span> <span class="string">Build</span> <span class="string">and</span> <span class="string">Run</span> <span class="string">OpenAiCodeReview</span> <span class="string">By</span> <span class="string">Main</span> <span class="string">Remote</span> <span class="string">Jar</span></span><br><span class="line"></span><br><span class="line"><span class="attr">on:</span></span><br><span class="line">  <span class="attr">push:</span></span><br><span class="line">    <span class="attr">branches:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">master</span></span><br><span class="line">  <span class="attr">pull_request:</span></span><br><span class="line">    <span class="attr">branches:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">master</span></span><br><span class="line"></span><br><span class="line"><span class="attr">jobs:</span></span><br><span class="line">  <span class="attr">build:</span></span><br><span class="line">    <span class="attr">runs-on:</span> <span class="string">ubuntu-latest</span></span><br><span class="line"></span><br><span class="line">    <span class="attr">steps:</span></span><br><span class="line">      <span class="comment"># 必须保留至少两次提交，否则 SDK 无法比较 HEAD 与其父提交。</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Checkout</span> <span class="string">repository</span></span><br><span class="line">        <span class="attr">uses:</span> <span class="string">actions/checkout@v2</span></span><br><span class="line">        <span class="attr">with:</span></span><br><span class="line">          <span class="attr">fetch-depth:</span> <span class="number">2</span></span><br><span class="line"></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Set</span> <span class="string">up</span> <span class="string">JDK</span> <span class="number">11</span></span><br><span class="line">        <span class="attr">uses:</span> <span class="string">actions/setup-java@v2</span></span><br><span class="line">        <span class="attr">with:</span></span><br><span class="line">          <span class="attr">distribution:</span> <span class="string">adopt</span></span><br><span class="line">          <span class="attr">java-version:</span> <span class="string">&quot;11&quot;</span></span><br><span class="line"></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Download</span> <span class="string">SDK</span> <span class="string">JAR</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">|</span></span><br><span class="line"><span class="string">          mkdir -p ./libs</span></span><br><span class="line"><span class="string">          curl -fL --retry 3 \</span></span><br><span class="line"><span class="string">            --output ./libs/openai-code-review-sdk-1.0.jar \</span></span><br><span class="line"><span class="string">            https://github.com/Moyu-Yunru/openai-code-review-log/releases/download/v1.0/openai-code-review-sdk-1.0.jar</span></span><br><span class="line"><span class="string">          jar tf ./libs/openai-code-review-sdk-1.0.jar &gt;/dev/null</span></span><br><span class="line"><span class="string"></span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Collect</span> <span class="string">commit</span> <span class="string">metadata</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">|</span></span><br><span class="line"><span class="string">          echo &quot;REPO_NAME=$&#123;GITHUB_REPOSITORY##*/&#125;&quot; &gt;&gt; $GITHUB_ENV</span></span><br><span class="line"><span class="string">          echo &quot;BRANCH_NAME=$&#123;GITHUB_REF#refs/heads/&#125;&quot; &gt;&gt; $GITHUB_ENV</span></span><br><span class="line"><span class="string">          echo &quot;COMMIT_AUTHOR=$(git log -1 --pretty=format:&#x27;%an &lt;%ae&gt;&#x27;)&quot; &gt;&gt; $GITHUB_ENV</span></span><br><span class="line"><span class="string">          echo &quot;COMMIT_MESSAGE=$(git log -1 --pretty=format:&#x27;%s&#x27;)&quot; &gt;&gt; $GITHUB_ENV</span></span><br><span class="line"><span class="string"></span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Run</span> <span class="string">Code</span> <span class="string">Review</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">java</span> <span class="string">-jar</span> <span class="string">./libs/openai-code-review-sdk-1.0.jar</span></span><br><span class="line">        <span class="attr">env:</span></span><br><span class="line">          <span class="attr">GITHUB_REVIEW_LOG_URI:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.CODE_REVIEW_LOG_URI</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">GITHUB_TOKEN:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.CODE_TOKEN</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">COMMIT_PROJECT:</span> <span class="string">$&#123;&#123;</span> <span class="string">env.REPO_NAME</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">COMMIT_BRANCH:</span> <span class="string">$&#123;&#123;</span> <span class="string">env.BRANCH_NAME</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">COMMIT_AUTHOR:</span> <span class="string">$&#123;&#123;</span> <span class="string">env.COMMIT_AUTHOR</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">COMMIT_MESSAGE:</span> <span class="string">$&#123;&#123;</span> <span class="string">env.COMMIT_MESSAGE</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">CHATGLM_APIHOST:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.CHATGLM_APIHOST</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">CHATGLM_APIKEYSECRET:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.CHATGLM_APIKEYSECRET</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">WEIXIN_APPID:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.WEIXIN_APPID</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">WEIXIN_SECRET:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.WEIXIN_SECRET</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">WEIXIN_TOUSER:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.WEIXIN_TOUSER</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">WEIXIN_TEMPLATE_ID:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.WEIXIN_TEMPLATE_ID</span> <span class="string">&#125;&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>如果仓库默认分支是 <code>main</code>，需要同时把 <code>push</code> 和 <code>pull_request</code> 下的 <code>master</code> 改成 <code>main</code>。<code>fetch-depth: 2</code> 也很关键，因为当前 SDK 使用“最新提交的哈希”和“最新提交的父提交”计算差异，只有一个提交时无法完成比较。</p>
+<h2 id="九、触发评审并检查结果"><a href="#九、触发评审并检查结果" class="headerlink" title="九、触发评审并检查结果"></a>九、触发评审并检查结果</h2><p>配置完成后，向 Workflow 监听的分支推送一次代码：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">git add .</span><br><span class="line">git commit -m <span class="string">&quot;test: 接入自动代码评审&quot;</span></span><br><span class="line">git push</span><br></pre></td></tr></table></figure>
+
+<p>随后进入仓库的 Actions 页面查看执行记录。正常情况下，需要检查三个结果：</p>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>期望结果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GitHub Actions</td>
+<td>Workflow 完成 SDK 下载和运行</td>
+</tr>
+<tr>
+<td>评审日志仓库</td>
+<td>出现按日期归档的新 Markdown 文件</td>
+</tr>
+<tr>
+<td>微信通知</td>
+<td>收到项目、分支、作者和提交说明</td>
+</tr>
+</tbody></table>
+<p>需要注意，当前 <code>exec()</code> 会捕获并记录内部异常，没有继续向外抛出。因此不能只根据 Workflow 最终是否显示绿色判断评审一定成功，还应该检查 Actions 日志和评审仓库是否真的出现了报告。这也是后续版本值得调整的地方：核心评审失败应该让 CI 明确失败，通知失败则可以采用相对宽松的策略。</p>
+<h2 id="十、不需要微信通知时怎么办"><a href="#十、不需要微信通知时怎么办" class="headerlink" title="十、不需要微信通知时怎么办"></a>十、不需要微信通知时怎么办</h2><p>当前版本的通知能力和主流程耦合得比较紧。入口会对全部环境变量做非空检查，这意味着四个微信变量只要有一个没有配置，程序就会在启动阶段抛出异常，评审流程也不会开始。</p>
+<p>如果暂时不需要微信通知，可以给四个微信 Secret 填写非空的占位值。这样能够通过当前版本的启动校验。由于执行顺序是“先生成并推送报告，再发送微信”，报告通常仍可正常写入日志仓库。</p>
+<p>不过，这种做法需要准确理解：</p>
+<ul>
+<li>占位值只是绕过“不能为空”的校验，并不是真正关闭通知。</li>
+<li>SDK 仍然会请求微信接口，只是无效凭据无法产生有效消息。</li>
+<li>当前代码会打印微信接口响应，但没有解析并判断响应中的业务错误码，所以无效配置通常不会推翻已经完成的报告归档。</li>
+<li>如果微信接口出现网络异常或 HTTP 层异常，日志中仍可能记录代码评审执行错误。</li>
+</ul>
+<p>因此，“填写占位值”只适合作为当前 <code>v1.0</code> 的临时兼容方式。更合理的设计是从模型上支持“不通知”，而不是用错误配置模拟关闭功能。</p>
+<h2 id="十一、更换-CI-平台时需要适配什么"><a href="#十一、更换-CI-平台时需要适配什么" class="headerlink" title="十一、更换 CI 平台时需要适配什么"></a>十一、更换 CI 平台时需要适配什么</h2><p>如果要从 GitHub Actions 迁移到 GitLab CI、Gitee Go、Jenkins 等平台，SDK 的模型评审逻辑可以复用，但外围执行层至少要适配以下内容：</p>
+<table>
+<thead>
+<tr>
+<th>适配点</th>
+<th>需要处理的内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>触发事件</td>
+<td>将 <code>push</code>、<code>pull_request</code> 改为目标平台的 Push、Merge Request 或流水线事件</td>
+</tr>
+<tr>
+<td>代码检出</td>
+<td>确保存在足够的 Git 历史，能够取得父提交并计算 diff</td>
+</tr>
+<tr>
+<td>提交元数据</td>
+<td>将平台变量转换为 <code>COMMIT_PROJECT</code>、<code>COMMIT_BRANCH</code>、<code>COMMIT_AUTHOR</code> 和 <code>COMMIT_MESSAGE</code></td>
+</tr>
+<tr>
+<td>密钥管理</td>
+<td>将 GitHub Secrets 改为目标平台的 Secret、Credential 或 CI Variable</td>
+</tr>
+<tr>
+<td>JAR 分发</td>
+<td>确保 Runner 能下载 Release 资产，或者改用制品库、容器镜像</td>
+</tr>
+<tr>
+<td>仓库认证</td>
+<td>根据平台调整 Token 权限、克隆地址和推送认证方式</td>
+</tr>
+<tr>
+<td>报告链接</td>
+<td>当前链接按 GitHub 的 <code>/blob/master/</code> 结构拼接，其他平台需要重新生成</td>
+</tr>
+</tbody></table>
+<p>还有一个容易忽略的问题：当前评审粒度是“最近一次提交的 diff”，它不一定等于一个 Pull Request 或 Merge Request 的完整变更。迁移平台时最好把“如何选择比较基线”抽成适配接口，分别支持单次提交、两个 SHA 之间的变化，以及整个 PR&#x2F;MR 的变化。</p>
+<h2 id="十二、下一版本：把通知抽象成独立接口"><a href="#十二、下一版本：把通知抽象成独立接口" class="headerlink" title="十二、下一版本：把通知抽象成独立接口"></a>十二、下一版本：把通知抽象成独立接口</h2><p>当前抽象服务直接依赖 <code>WeiXin</code>，主流程也固定调用微信发送方法。这会带来两个问题：不需要通知时仍被迫配置微信参数；新增钉钉、飞书或邮件时，需要修改已有业务流程。</p>
+<p>下一版本可以把通知能力抽象为 <code>INotification</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">INotification</span><br><span class="line">├── WeiXinNotification</span><br><span class="line">├── DingTalkNotification</span><br><span class="line">├── FeiShuNotification</span><br><span class="line">├── EmailNotification</span><br><span class="line">└── NoOpNotification</span><br></pre></td></tr></table></figure>
+
+<p>接口不应该直接暴露微信模板的 <code>Map</code> 结构，而应接收一个与渠道无关的消息对象：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">interface</span> <span class="title class_">INotification</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 发送一次代码评审完成通知。</span></span><br><span class="line"><span class="comment">     * 不同渠道负责把统一消息转换为各自需要的请求格式。</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">void</span> <span class="title function_">send</span><span class="params">(ReviewNotification message)</span> <span class="keyword">throws</span> Exception;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>NoOpNotification</code> 不执行任何外部请求：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">NoOpNotification</span> <span class="keyword">implements</span> <span class="title class_">INotification</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">send</span><span class="params">(ReviewNotification message)</span> &#123;</span><br><span class="line">        <span class="comment">// 明确表示当前关闭通知。评审报告仍会生成并归档。</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>启动时再根据配置选择实现：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">NOTICE_TYPE=none       -&gt; NoOpNotification</span><br><span class="line">NOTICE_TYPE=weixin     -&gt; WeiXinNotification</span><br><span class="line">NOTICE_TYPE=dingtalk   -&gt; DingTalkNotification</span><br><span class="line">NOTICE_TYPE=feishu     -&gt; FeiShuNotification</span><br><span class="line">NOTICE_TYPE=email      -&gt; EmailNotification</span><br></pre></td></tr></table></figure>
+
+<p>默认值可以设为 <code>none</code>。这样不配置通知时就自然使用 <code>NoOpNotification</code>，只生成报告而不发消息；只有选择 <code>weixin</code> 时才校验 <code>WEIXIN_APPID</code>、<code>WEIXIN_SECRET</code>、<code>WEIXIN_TOUSER</code> 和 <code>WEIXIN_TEMPLATE_ID</code>。以后增加新渠道，只需要新增实现类和对应配置，不必修改代码评审的主流程。</p>
+<p>这个改造还可以顺便明确失败策略：</p>
+<ul>
+<li>获取 diff、调用模型或写入报告失败，属于核心流程失败，应该让 CI 返回失败状态。</li>
+<li>通知发送失败，默认只记录错误，不影响已经生成的报告。</li>
+<li>对通知要求严格的团队，可以再增加 <code>NOTICE_FAILURE_STRATEGY=strict</code>，决定是否让通知失败影响流水线。</li>
+</ul>
+<p>这比简单增加几个 <code>if</code> 判断更稳定，也让“代码评审”和“消息触达”成为两个边界清楚的能力。</p>
+<h2 id="十三、当前版本还可以继续改进什么"><a href="#十三、当前版本还可以继续改进什么" class="headerlink" title="十三、当前版本还可以继续改进什么"></a>十三、当前版本还可以继续改进什么</h2><p>除了通知接口，组件下一步还可以从几个方面继续完善：</p>
+<ol>
+<li>将 Git 平台差异抽成接口，不再固定拼接 GitHub 的仓库和报告链接。</li>
+<li>支持指定 base SHA 和 head SHA，准确评审完整 PR&#x2F;MR，而不仅是最近一次提交。</li>
+<li>区分核心流程异常与通知异常，让 CI 状态真实反映评审是否成功。</li>
+<li>对微信等外部接口的响应体做业务错误码校验，并输出更明确的错误信息。</li>
+<li>为不同类型的环境变量增加分组校验，只校验当前启用能力真正需要的配置。</li>
+<li>增加报告大小、diff 大小和敏感文件过滤，避免超长请求或不必要的信息外发。</li>
+</ol>
+<h2 id="十四、总结"><a href="#十四、总结" class="headerlink" title="十四、总结"></a>十四、总结</h2><p><code>openai-code-review</code> 的核心价值，不只是调用一次大模型，而是把“获取变更、生成评审、归档结果、通知开发者”串成了一条可以重复执行的工程流程。</p>
+<p>当前版本借助 GitHub Actions 已经能够以较低成本接入其他 GitHub 仓库：准备日志仓库和 Token，配置模型与微信 Secrets，复制 Workflow，推送代码即可触发。但也要认识到现阶段的边界：执行入口依赖 GitHub Actions，评审对象是最近一次提交，微信参数形式上必填，通知也还没有与主流程解耦。</p>
+<p>下一版本引入 <code>INotification</code> 和 <code>NoOpNotification</code> 后，“不通知”会成为系统正式支持的一种策略；微信、钉钉、飞书和邮件则只是可替换的实现。再进一步抽象 Git 平台和 diff 选择方式，这个组件就能从一个 GitHub Actions 工具，逐渐演进为更通用的自动代码评审基础设施。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/AI%E4%BB%A3%E7%A0%81%E8%AF%84%E5%AE%A1/" rel="tag"># AI代码评审</a>
+              <a href="/tags/GitHub-Actions/" rel="tag"># GitHub Actions</a>
+              <a href="/tags/Java/" rel="tag"># Java</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2026/07/09/harness-development-workflow/" rel="prev" title="用 Development Workflow Orchestrator 串联 DDD Skill 开发工作流">
+      <i class="fa fa-chevron-left"></i> 用 Development Workflow Orchestrator 串联 DDD Skill 开发工作流
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+    <div class="comments" id="utterances-container"></div>
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E3%80%81%E7%BB%84%E4%BB%B6%E8%A7%A3%E5%86%B3%E4%BA%86%E4%BB%80%E4%B9%88%E9%97%AE%E9%A2%98"><span class="nav-number">1.</span> <span class="nav-text">一、组件解决了什么问题</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%8C%E3%80%81%E9%A1%B9%E7%9B%AE%E7%BB%93%E6%9E%84%E4%B8%8E%E6%A0%B8%E5%BF%83%E8%AE%BE%E8%AE%A1"><span class="nav-number">2.</span> <span class="nav-text">二、项目结构与核心设计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%89%E3%80%81%E4%B8%BA%E4%BB%80%E4%B9%88%E5%BD%93%E5%89%8D%E4%B8%BB%E8%A6%81%E4%BE%9D%E8%B5%96-GitHub-Actions"><span class="nav-number">3.</span> <span class="nav-text">三、为什么当前主要依赖 GitHub Actions</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9B%E3%80%81%E6%8E%A5%E5%85%A5%E5%89%8D%E9%9C%80%E8%A6%81%E5%87%86%E5%A4%87%E7%9A%84%E8%B5%84%E6%BA%90"><span class="nav-number">4.</span> <span class="nav-text">四、接入前需要准备的资源</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BA%94%E3%80%81%E5%88%9B%E5%BB%BA%E8%AF%84%E5%AE%A1%E6%97%A5%E5%BF%97%E4%BB%93%E5%BA%93%E5%92%8C%E8%AE%BF%E9%97%AE%E4%BB%A4%E7%89%8C"><span class="nav-number">5.</span> <span class="nav-text">五、创建评审日志仓库和访问令牌</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AD%E3%80%81%E5%87%86%E5%A4%87-ChatGLM-%E4%B8%8E%E5%BE%AE%E4%BF%A1%E9%85%8D%E7%BD%AE"><span class="nav-number">6.</span> <span class="nav-text">六、准备 ChatGLM 与微信配置</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%83%E3%80%81%E5%9C%A8%E4%B8%9A%E5%8A%A1%E4%BB%93%E5%BA%93%E9%85%8D%E7%BD%AE-GitHub-Secrets"><span class="nav-number">7.</span> <span class="nav-text">七、在业务仓库配置 GitHub Secrets</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%AB%E3%80%81%E6%B7%BB%E5%8A%A0-GitHub-Actions-Workflow"><span class="nav-number">8.</span> <span class="nav-text">八、添加 GitHub Actions Workflow</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B9%9D%E3%80%81%E8%A7%A6%E5%8F%91%E8%AF%84%E5%AE%A1%E5%B9%B6%E6%A3%80%E6%9F%A5%E7%BB%93%E6%9E%9C"><span class="nav-number">9.</span> <span class="nav-text">九、触发评审并检查结果</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%81%E3%80%81%E4%B8%8D%E9%9C%80%E8%A6%81%E5%BE%AE%E4%BF%A1%E9%80%9A%E7%9F%A5%E6%97%B6%E6%80%8E%E4%B9%88%E5%8A%9E"><span class="nav-number">10.</span> <span class="nav-text">十、不需要微信通知时怎么办</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%81%E4%B8%80%E3%80%81%E6%9B%B4%E6%8D%A2-CI-%E5%B9%B3%E5%8F%B0%E6%97%B6%E9%9C%80%E8%A6%81%E9%80%82%E9%85%8D%E4%BB%80%E4%B9%88"><span class="nav-number">11.</span> <span class="nav-text">十一、更换 CI 平台时需要适配什么</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%81%E4%BA%8C%E3%80%81%E4%B8%8B%E4%B8%80%E7%89%88%E6%9C%AC%EF%BC%9A%E6%8A%8A%E9%80%9A%E7%9F%A5%E6%8A%BD%E8%B1%A1%E6%88%90%E7%8B%AC%E7%AB%8B%E6%8E%A5%E5%8F%A3"><span class="nav-number">12.</span> <span class="nav-text">十二、下一版本：把通知抽象成独立接口</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%81%E4%B8%89%E3%80%81%E5%BD%93%E5%89%8D%E7%89%88%E6%9C%AC%E8%BF%98%E5%8F%AF%E4%BB%A5%E7%BB%A7%E7%BB%AD%E6%94%B9%E8%BF%9B%E4%BB%80%E4%B9%88"><span class="nav-number">13.</span> <span class="nav-text">十三、当前版本还可以继续改进什么</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8D%81%E5%9B%9B%E3%80%81%E6%80%BB%E7%BB%93"><span class="nav-number">14.</span> <span class="nav-text">十四、总结</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Libra"
+      src="/images/IMG_1578.jpeg">
+  <p class="site-author-name" itemprop="name">Libra</p>
+  <div class="site-description" itemprop="description">记录技术、项目与思考</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">15</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">36</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Moyu-Yunru" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Moyu-Yunru" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Libra</span>
+</div><div class="libra-footer-left">
+  <span>由 <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> 驱动</span>
+  <span>主题 <a href="https://pisces.theme-next.org/" rel="noopener" target="_blank">NexT.Pisces</a></span>
+</div>
+
+<div class="libra-footer-extra">
+  <span>共撰写了 15 篇文章</span>
+  <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
+</div>
+
+
+        
+<div class="busuanzi-count">
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<script>
+NexT.utils.loadComments(document.querySelector('#utterances-container'), () => {
+  var container = document.querySelector('#utterances-container');
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  var script = document.createElement('script');
+  script.src = 'https://utteranc.es/client.js';
+  script.setAttribute('repo', "Moyu-Yunru/blog-comments");
+  script.setAttribute('issue-term', "title");
+  script.setAttribute('theme', "github-light");
+  script.crossOrigin = 'anonymous';
+  script.async = true;
+
+  container.appendChild(script);
+});
+</script>
+<script>
+(function() {
+  var phrases = [
+    '随心所欲地享受每一天(￣︶￣*))',
+    '学习 LLM，也拆解 Agent 的工作方式',
+    '把 AI 工具链放进真实工程场景',
+    '记录问题的答案，也记录学习的路径',
+    '如果喜欢，建议给个支持( •̀ ω •́ )✧',
+    '喜欢的话，留个言好嘛(oﾟvﾟ)ノ',
+    '你有建议？反馈作者(●^◡^●)',
+    '我们总是走得太急，却忘了当初为什么出发——纪伯伦',
+    '火车是朝前开的，去哪儿并不重要，关键在于窗外的风景——吕子乔',
+    '世界上只有一种真正的英雄主义，那就是认清生活的真相后依然热爱生活——罗曼·罗兰',
+  ];
+
+  function initTypewriter() {
+    var target = document.querySelector('[data-libra-typewriter]');
+    if (!target) return;
+
+    if (window.__libraTypewriterTimer) {
+      clearTimeout(window.__libraTypewriterTimer);
+    }
+
+    var phraseIndex = 0;
+    var charIndex = 0;
+    var deleting = false;
+
+    function tick() {
+      var current = phrases[phraseIndex];
+      target.textContent = current.slice(0, charIndex);
+
+      if (!deleting && charIndex < current.length) {
+        charIndex += 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 88);
+        return;
+      }
+
+      if (!deleting && charIndex === current.length) {
+        deleting = true;
+        window.__libraTypewriterTimer = setTimeout(tick, 1600);
+        return;
+      }
+
+      if (deleting && charIndex > 0) {
+        charIndex -= 1;
+        window.__libraTypewriterTimer = setTimeout(tick, 42);
+        return;
+      }
+
+      deleting = false;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      window.__libraTypewriterTimer = setTimeout(tick, 420);
+    }
+
+    tick();
+  }
+
+  function initRuntime() {
+    var runtime = document.getElementById('libra-site-runtime');
+    if (!runtime) return;
+
+    var start = new Date(runtime.getAttribute('data-start')).getTime();
+    if (!start) return;
+
+    function renderRuntime() {
+      var diff = Math.max(0, Date.now() - start);
+      var seconds = Math.floor(diff / 1000);
+      var days = Math.floor(seconds / 86400);
+      seconds %= 86400;
+      var hours = Math.floor(seconds / 3600);
+      seconds %= 3600;
+      var minutes = Math.floor(seconds / 60);
+      seconds %= 60;
+      runtime.textContent = days + ' 天 ' + hours + ' 小时 ' + minutes + ' 分钟 ' + seconds + ' 秒';
+    }
+
+    renderRuntime();
+    if (window.__libraRuntimeTimer) {
+      clearInterval(window.__libraRuntimeTimer);
+    }
+    window.__libraRuntimeTimer = setInterval(renderRuntime, 1000);
+  }
+
+  function initLibraHome() {
+    initTypewriter();
+    initRuntime();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLibraHome);
+  } else {
+    initLibraHome();
+  }
+  document.addEventListener('pjax:success', initLibraHome);
+})();
+</script>
+
+</body>
+</html>

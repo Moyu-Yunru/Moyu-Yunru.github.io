@@ -165,6 +165,384 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/08/03/github-actions-ai-code-review/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/IMG_1578.jpeg">
+      <meta itemprop="name" content="Libra">
+      <meta itemprop="description" content="记录技术、项目与思考">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Libra's notes">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2026/08/03/github-actions-ai-code-review/" class="post-title-link" itemprop="url">把 AI 代码评审接入 GitHub Actions：从提交 Diff 到微信通知</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2026-08-03 20:30:00 / 修改时间：21:40:56" itemprop="dateCreated datePublished" datetime="2026-08-03T20:30:00+08:00">2026-08-03</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>代码评审是研发流程里很重要的一环，但它也很容易因为时间紧、提交频繁而变成一句“看起来没问题”。如果能在代码推送后自动提取变更、调用大模型分析，并把结果归档下来，就可以先让机器完成一轮稳定的基础检查，再由开发者把注意力放到业务逻辑和架构决策上。</p>
+<p><code>openai-code-review</code> 就是围绕这个思路实现的一个 Java 组件。它目前以 GitHub Actions 作为执行入口：代码发生变更后，Workflow 下载并运行 SDK，SDK 获取最近一次提交的 <code>git diff</code>，调用 ChatGLM 生成 Markdown 评审报告，将报告提交到独立的 GitHub 日志仓库，最后通过微信公众号模板消息发送通知。</p>
+<p>这篇文章会介绍组件当前的工作原理、完整接入过程、微信通知的特殊处理，以及后续如何把通知能力改造成可插拔接口。</p>
+<h2 id="一、组件解决了什么问题"><a href="#一、组件解决了什么问题" class="headerlink" title="一、组件解决了什么问题"></a>一、组件解决了什么问题</h2><p>传统代码评审一般依赖开发者主动创建 Pull Request，再由团队成员逐行检查。人工评审不可替代，但一些重复性问题很适合先交给大模型处理，例如：</p>
+<ul>
+<li>是否存在明显的逻辑漏洞和边界条件遗漏。</li>
+<li>异常处理、资源释放和空值判断是否完整。</li>
+<li>命名、注释与代码结构是否清晰。</li>
+<li>是否存在潜在性能瓶颈或安全风险。</li>
+<li>能否给出具体的修改建议和参考代码。</li>
+</ul>
+<p>组件把这一步放到了持续集成流程中。一次完整执行可以概括为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">代码 push 或 Pull Request</span><br><span class="line">        ↓</span><br><span class="line">GitHub Actions 检出代码并准备 JDK</span><br><span class="line">        ↓</span><br><span class="line">下载并运行 openai-code-review-sdk JAR</span><br><span class="line">        ↓</span><br><span class="line">读取最近一次提交的 git diff</span><br><span class="line">        ↓</span><br><span class="line">调用 ChatGLM 生成 Markdown 评审报告</span><br><span class="line">        ↓</span><br><span class="line">将报告提交到独立的 GitHub 日志仓库</span><br><span class="line">        ↓</span><br><span class="line">发送微信公众号模板消息</span><br></pre></td></tr></table></figure>
+
+<p>这样做有两个直接好处。第一，评审过程不依赖开发者本地环境，只要代码进入远端仓库就可以自动执行。第二，报告不会只停留在 Actions 日志里，而是按日期保存到专门的仓库中，便于回溯某次提交的评审结果。</p>
+<h2 id="二、项目结构与核心设计"><a href="#二、项目结构与核心设计" class="headerlink" title="二、项目结构与核心设计"></a>二、项目结构与核心设计</h2><p>项目采用 Maven 多模块结构：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">openai-code-review</span><br><span class="line">├── openai-code-review-sdk     # 核心 SDK，可打包成独立可执行 JAR</span><br><span class="line">└── openai-code-review-test    # Spring Boot 测试应用</span><br></pre></td></tr></table></figure>
+
+<p>SDK 内部又按职责划分为几个部分：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>domain/service</code></td>
+<td>编排代码评审的完整业务流程</td>
+</tr>
+<tr>
+<td><code>infrastructure/git</code></td>
+<td>获取 diff、克隆日志仓库、提交并推送报告</td>
+</tr>
+<tr>
+<td><code>infrastructure/openai</code></td>
+<td>调用大模型接口，当前实现为 ChatGLM</td>
+</tr>
+<tr>
+<td><code>infrastructure/weixin</code></td>
+<td>获取微信 Access Token 并发送模板消息</td>
+</tr>
+<tr>
+<td><code>types/utils</code></td>
+<td>Token、随机字符串等通用工具</td>
+</tr>
+</tbody></table>
+<p>评审主流程使用了模板方法模式。抽象服务规定四个步骤，具体服务负责实现：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">exec</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="comment">// 第一步：读取当前仓库最近一次提交产生的代码差异。</span></span><br><span class="line">    <span class="type">String</span> <span class="variable">diffCode</span> <span class="operator">=</span> getDiffCode();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 第二步：把 diff 交给大模型，生成 Markdown 格式的评审内容。</span></span><br><span class="line">    <span class="type">String</span> <span class="variable">recommend</span> <span class="operator">=</span> codeReview(diffCode);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 第三步：将报告写入日志仓库，并取得可以访问报告的地址。</span></span><br><span class="line">    <span class="type">String</span> <span class="variable">logUrl</span> <span class="operator">=</span> recordCodeReview(recommend);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 第四步：把项目、分支、作者和报告地址发送给通知渠道。</span></span><br><span class="line">    pushMessage(logUrl);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>大模型部分已经通过 <code>IOpenAI</code> 接口隔离。当前使用 ChatGLM，后续如果要接入其他兼容服务，可以新增实现类，而不必重写 Git 操作和流程编排。这种设计思路同样适合后面要讨论的通知模块。</p>
+<h2 id="三、为什么当前主要依赖-GitHub-Actions"><a href="#三、为什么当前主要依赖-GitHub-Actions" class="headerlink" title="三、为什么当前主要依赖 GitHub Actions"></a>三、为什么当前主要依赖 GitHub Actions</h2><p>SDK 本身是一个可执行 JAR，但它需要有人在合适的时机准备代码仓库和环境变量，然后启动它。当前这个“执行器”就是 GitHub Actions。</p>
+<p>Workflow 主要承担五项职责：</p>
+<ol>
+<li>监听 <code>push</code> 和 <code>pull_request</code> 事件。</li>
+<li>检出代码，并保留足够的 Git 历史用于计算 diff。</li>
+<li>准备 Java 运行环境并下载 SDK JAR。</li>
+<li>从 GitHub 上下文和 Git 命令中提取项目、分支、作者与提交信息。</li>
+<li>将 GitHub Secrets 转换成 SDK 需要的环境变量。</li>
+</ol>
+<p>因此，这个组件并非只能在 GitHub 上运行，但当前接入模板、元数据提取、密钥管理和报告链接都围绕 GitHub 编写。如果换到 GitLab CI、Gitee Go、Jenkins 或其他平台，需要针对平台事件模型和环境变量做适配，不能原样复制 GitHub Workflow。</p>
+<h2 id="四、接入前需要准备的资源"><a href="#四、接入前需要准备的资源" class="headerlink" title="四、接入前需要准备的资源"></a>四、接入前需要准备的资源</h2><p>在业务仓库接入前，需要准备以下内容：</p>
+<table>
+<thead>
+<tr>
+<th>资源</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>待评审代码仓库</td>
+<td>触发自动评审的业务项目</td>
+</tr>
+<tr>
+<td>评审日志仓库</td>
+<td>保存大模型生成的 Markdown 报告</td>
+</tr>
+<tr>
+<td>GitHub Token</td>
+<td>允许 SDK 向日志仓库提交文件</td>
+</tr>
+<tr>
+<td>ChatGLM API Key</td>
+<td>调用大模型生成评审结果</td>
+</tr>
+<tr>
+<td>微信公众号配置</td>
+<td>接收评审完成通知，当前版本形式上必填</td>
+</tr>
+<tr>
+<td>GitHub Actions Workflow</td>
+<td>触发并运行评审组件</td>
+</tr>
+</tbody></table>
+<p>当前发布的 SDK JAR 地址是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://github.com/Moyu-Yunru/openai-code-review-log/releases/download/v1.0/openai-code-review-sdk-1.0.jar</span><br></pre></td></tr></table></figure>
+
+<p>这里必须使用 <code>/releases/download/</code> 对应的资产下载地址。<code>/releases/tag/</code> 是展示 Release 的网页，如果把网页地址当成 JAR 下载，运行时会遇到 <code>Invalid or corrupt jarfile</code>。</p>
+<h2 id="五、创建评审日志仓库和访问令牌"><a href="#五、创建评审日志仓库和访问令牌" class="headerlink" title="五、创建评审日志仓库和访问令牌"></a>五、创建评审日志仓库和访问令牌</h2><p>评审报告不会写回业务代码仓库，而是统一保存到一个独立仓库，例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://github.com/Moyu-Yunru/openai-code-review-log</span><br></pre></td></tr></table></figure>
+
+<p>配置日志仓库地址时不要带 <code>.git</code> 后缀，SDK 会在克隆时自行补充。报告生成后会按日期创建目录，再以项目、分支、作者、时间戳和随机数组合文件名。</p>
+<p>GitHub Token 推荐使用 fine-grained token，只给日志仓库开放必要权限：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Contents: Read and write</span><br><span class="line">Metadata: Read-only</span><br></pre></td></tr></table></figure>
+
+<p>如果使用 classic token，则需要具备相应仓库的 <code>repo</code> 权限。Token、模型 Key 和微信 Secret 都只能放在 Actions Secrets 中，不要直接写入 Workflow 或提交到代码仓库。</p>
+<h2 id="六、准备-ChatGLM-与微信配置"><a href="#六、准备-ChatGLM-与微信配置" class="headerlink" title="六、准备 ChatGLM 与微信配置"></a>六、准备 ChatGLM 与微信配置</h2><p>当前模型实现使用 ChatGLM，请求地址和 Key 通过环境变量注入：</p>
+<table>
+<thead>
+<tr>
+<th>配置项</th>
+<th>示例或格式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CHATGLM_APIHOST</code></td>
+<td><code>https://open.bigmodel.cn/api/paas/v4/chat/completions</code></td>
+</tr>
+<tr>
+<td><code>CHATGLM_APIKEYSECRET</code></td>
+<td><code>{id}.{secret}</code></td>
+</tr>
+</tbody></table>
+<p><code>CHATGLM_APIHOST</code> 必须包含协议头，Secret 的值也不要额外包一层引号，否则可能出现 <code>MalformedURLException: no protocol</code> 或鉴权失败。</p>
+<p>微信通知需要四项配置：</p>
+<table>
+<thead>
+<tr>
+<th>配置项</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>WEIXIN_APPID</code></td>
+<td>公众号或测试号 AppID</td>
+</tr>
+<tr>
+<td><code>WEIXIN_SECRET</code></td>
+<td>公众号或测试号 Secret</td>
+</tr>
+<tr>
+<td><code>WEIXIN_TOUSER</code></td>
+<td>接收者 OpenID</td>
+</tr>
+<tr>
+<td><code>WEIXIN_TEMPLATE_ID</code></td>
+<td>模板消息 ID</td>
+</tr>
+</tbody></table>
+<p>模板变量必须与 SDK 保持一致：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">项目：&#123;&#123;repo_name.DATA&#125;&#125;</span><br><span class="line">分支：&#123;&#123;branch_name.DATA&#125;&#125;</span><br><span class="line">作者：&#123;&#123;commit_author.DATA&#125;&#125;</span><br><span class="line">说明：&#123;&#123;commit_message.DATA&#125;&#125;</span><br></pre></td></tr></table></figure>
+
+<p>特别要注意作者字段是 <code>commit_author</code>，不是 <code>author_name</code>。变量名不一致时，Actions 可能已经执行完成，但微信消息中的对应内容不会正常显示。</p>
+<h2 id="七、在业务仓库配置-GitHub-Secrets"><a href="#七、在业务仓库配置-GitHub-Secrets" class="headerlink" title="七、在业务仓库配置 GitHub Secrets"></a>七、在业务仓库配置 GitHub Secrets</h2><p>进入待评审仓库的以下位置：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Settings -&gt; Secrets and variables -&gt; Actions -&gt; New repository secret</span><br></pre></td></tr></table></figure>
+
+<p>添加这些 Secrets：</p>
+<table>
+<thead>
+<tr>
+<th>Secret 名称</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CODE_REVIEW_LOG_URI</code></td>
+<td>日志仓库地址，不带 <code>.git</code></td>
+</tr>
+<tr>
+<td><code>CODE_TOKEN</code></td>
+<td>对日志仓库有写权限的 GitHub Token</td>
+</tr>
+<tr>
+<td><code>CHATGLM_APIHOST</code></td>
+<td>ChatGLM API 地址</td>
+</tr>
+<tr>
+<td><code>CHATGLM_APIKEYSECRET</code></td>
+<td>ChatGLM API Key</td>
+</tr>
+<tr>
+<td><code>WEIXIN_APPID</code></td>
+<td>微信 AppID</td>
+</tr>
+<tr>
+<td><code>WEIXIN_SECRET</code></td>
+<td>微信 Secret</td>
+</tr>
+<tr>
+<td><code>WEIXIN_TOUSER</code></td>
+<td>接收者 OpenID</td>
+</tr>
+<tr>
+<td><code>WEIXIN_TEMPLATE_ID</code></td>
+<td>微信模板 ID</td>
+</tr>
+</tbody></table>
+<p>Secret 名称和 SDK 读取的环境变量名称并不完全相同，二者在 Workflow 的 <code>env</code> 中完成映射。例如 <code>CODE_TOKEN</code> 最终映射为 <code>GITHUB_TOKEN</code>。</p>
+<h2 id="八、添加-GitHub-Actions-Workflow"><a href="#八、添加-GitHub-Actions-Workflow" class="headerlink" title="八、添加 GitHub Actions Workflow"></a>八、添加 GitHub Actions Workflow</h2><p>在业务仓库中新建：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">.github/workflows/main-remote-jar.yml</span><br></pre></td></tr></table></figure>
+
+<p>下面是当前远程 JAR 接入方式的核心配置：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">name:</span> <span class="string">Build</span> <span class="string">and</span> <span class="string">Run</span> <span class="string">OpenAiCodeReview</span> <span class="string">By</span> <span class="string">Main</span> <span class="string">Remote</span> <span class="string">Jar</span></span><br><span class="line"></span><br><span class="line"><span class="attr">on:</span></span><br><span class="line">  <span class="attr">push:</span></span><br><span class="line">    <span class="attr">branches:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">master</span></span><br><span class="line">  <span class="attr">pull_request:</span></span><br><span class="line">    <span class="attr">branches:</span></span><br><span class="line">      <span class="bullet">-</span> <span class="string">master</span></span><br><span class="line"></span><br><span class="line"><span class="attr">jobs:</span></span><br><span class="line">  <span class="attr">build:</span></span><br><span class="line">    <span class="attr">runs-on:</span> <span class="string">ubuntu-latest</span></span><br><span class="line"></span><br><span class="line">    <span class="attr">steps:</span></span><br><span class="line">      <span class="comment"># 必须保留至少两次提交，否则 SDK 无法比较 HEAD 与其父提交。</span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Checkout</span> <span class="string">repository</span></span><br><span class="line">        <span class="attr">uses:</span> <span class="string">actions/checkout@v2</span></span><br><span class="line">        <span class="attr">with:</span></span><br><span class="line">          <span class="attr">fetch-depth:</span> <span class="number">2</span></span><br><span class="line"></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Set</span> <span class="string">up</span> <span class="string">JDK</span> <span class="number">11</span></span><br><span class="line">        <span class="attr">uses:</span> <span class="string">actions/setup-java@v2</span></span><br><span class="line">        <span class="attr">with:</span></span><br><span class="line">          <span class="attr">distribution:</span> <span class="string">adopt</span></span><br><span class="line">          <span class="attr">java-version:</span> <span class="string">&quot;11&quot;</span></span><br><span class="line"></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Download</span> <span class="string">SDK</span> <span class="string">JAR</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">|</span></span><br><span class="line"><span class="string">          mkdir -p ./libs</span></span><br><span class="line"><span class="string">          curl -fL --retry 3 \</span></span><br><span class="line"><span class="string">            --output ./libs/openai-code-review-sdk-1.0.jar \</span></span><br><span class="line"><span class="string">            https://github.com/Moyu-Yunru/openai-code-review-log/releases/download/v1.0/openai-code-review-sdk-1.0.jar</span></span><br><span class="line"><span class="string">          jar tf ./libs/openai-code-review-sdk-1.0.jar &gt;/dev/null</span></span><br><span class="line"><span class="string"></span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Collect</span> <span class="string">commit</span> <span class="string">metadata</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">|</span></span><br><span class="line"><span class="string">          echo &quot;REPO_NAME=$&#123;GITHUB_REPOSITORY##*/&#125;&quot; &gt;&gt; $GITHUB_ENV</span></span><br><span class="line"><span class="string">          echo &quot;BRANCH_NAME=$&#123;GITHUB_REF#refs/heads/&#125;&quot; &gt;&gt; $GITHUB_ENV</span></span><br><span class="line"><span class="string">          echo &quot;COMMIT_AUTHOR=$(git log -1 --pretty=format:&#x27;%an &lt;%ae&gt;&#x27;)&quot; &gt;&gt; $GITHUB_ENV</span></span><br><span class="line"><span class="string">          echo &quot;COMMIT_MESSAGE=$(git log -1 --pretty=format:&#x27;%s&#x27;)&quot; &gt;&gt; $GITHUB_ENV</span></span><br><span class="line"><span class="string"></span></span><br><span class="line">      <span class="bullet">-</span> <span class="attr">name:</span> <span class="string">Run</span> <span class="string">Code</span> <span class="string">Review</span></span><br><span class="line">        <span class="attr">run:</span> <span class="string">java</span> <span class="string">-jar</span> <span class="string">./libs/openai-code-review-sdk-1.0.jar</span></span><br><span class="line">        <span class="attr">env:</span></span><br><span class="line">          <span class="attr">GITHUB_REVIEW_LOG_URI:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.CODE_REVIEW_LOG_URI</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">GITHUB_TOKEN:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.CODE_TOKEN</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">COMMIT_PROJECT:</span> <span class="string">$&#123;&#123;</span> <span class="string">env.REPO_NAME</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">COMMIT_BRANCH:</span> <span class="string">$&#123;&#123;</span> <span class="string">env.BRANCH_NAME</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">COMMIT_AUTHOR:</span> <span class="string">$&#123;&#123;</span> <span class="string">env.COMMIT_AUTHOR</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">COMMIT_MESSAGE:</span> <span class="string">$&#123;&#123;</span> <span class="string">env.COMMIT_MESSAGE</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">CHATGLM_APIHOST:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.CHATGLM_APIHOST</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">CHATGLM_APIKEYSECRET:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.CHATGLM_APIKEYSECRET</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">WEIXIN_APPID:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.WEIXIN_APPID</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">WEIXIN_SECRET:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.WEIXIN_SECRET</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">WEIXIN_TOUSER:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.WEIXIN_TOUSER</span> <span class="string">&#125;&#125;</span></span><br><span class="line">          <span class="attr">WEIXIN_TEMPLATE_ID:</span> <span class="string">$&#123;&#123;</span> <span class="string">secrets.WEIXIN_TEMPLATE_ID</span> <span class="string">&#125;&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>如果仓库默认分支是 <code>main</code>，需要同时把 <code>push</code> 和 <code>pull_request</code> 下的 <code>master</code> 改成 <code>main</code>。<code>fetch-depth: 2</code> 也很关键，因为当前 SDK 使用“最新提交的哈希”和“最新提交的父提交”计算差异，只有一个提交时无法完成比较。</p>
+<h2 id="九、触发评审并检查结果"><a href="#九、触发评审并检查结果" class="headerlink" title="九、触发评审并检查结果"></a>九、触发评审并检查结果</h2><p>配置完成后，向 Workflow 监听的分支推送一次代码：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">git add .</span><br><span class="line">git commit -m <span class="string">&quot;test: 接入自动代码评审&quot;</span></span><br><span class="line">git push</span><br></pre></td></tr></table></figure>
+
+<p>随后进入仓库的 Actions 页面查看执行记录。正常情况下，需要检查三个结果：</p>
+<table>
+<thead>
+<tr>
+<th>检查点</th>
+<th>期望结果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GitHub Actions</td>
+<td>Workflow 完成 SDK 下载和运行</td>
+</tr>
+<tr>
+<td>评审日志仓库</td>
+<td>出现按日期归档的新 Markdown 文件</td>
+</tr>
+<tr>
+<td>微信通知</td>
+<td>收到项目、分支、作者和提交说明</td>
+</tr>
+</tbody></table>
+<p>需要注意，当前 <code>exec()</code> 会捕获并记录内部异常，没有继续向外抛出。因此不能只根据 Workflow 最终是否显示绿色判断评审一定成功，还应该检查 Actions 日志和评审仓库是否真的出现了报告。这也是后续版本值得调整的地方：核心评审失败应该让 CI 明确失败，通知失败则可以采用相对宽松的策略。</p>
+<h2 id="十、不需要微信通知时怎么办"><a href="#十、不需要微信通知时怎么办" class="headerlink" title="十、不需要微信通知时怎么办"></a>十、不需要微信通知时怎么办</h2><p>当前版本的通知能力和主流程耦合得比较紧。入口会对全部环境变量做非空检查，这意味着四个微信变量只要有一个没有配置，程序就会在启动阶段抛出异常，评审流程也不会开始。</p>
+<p>如果暂时不需要微信通知，可以给四个微信 Secret 填写非空的占位值。这样能够通过当前版本的启动校验。由于执行顺序是“先生成并推送报告，再发送微信”，报告通常仍可正常写入日志仓库。</p>
+<p>不过，这种做法需要准确理解：</p>
+<ul>
+<li>占位值只是绕过“不能为空”的校验，并不是真正关闭通知。</li>
+<li>SDK 仍然会请求微信接口，只是无效凭据无法产生有效消息。</li>
+<li>当前代码会打印微信接口响应，但没有解析并判断响应中的业务错误码，所以无效配置通常不会推翻已经完成的报告归档。</li>
+<li>如果微信接口出现网络异常或 HTTP 层异常，日志中仍可能记录代码评审执行错误。</li>
+</ul>
+<p>因此，“填写占位值”只适合作为当前 <code>v1.0</code> 的临时兼容方式。更合理的设计是从模型上支持“不通知”，而不是用错误配置模拟关闭功能。</p>
+<h2 id="十一、更换-CI-平台时需要适配什么"><a href="#十一、更换-CI-平台时需要适配什么" class="headerlink" title="十一、更换 CI 平台时需要适配什么"></a>十一、更换 CI 平台时需要适配什么</h2><p>如果要从 GitHub Actions 迁移到 GitLab CI、Gitee Go、Jenkins 等平台，SDK 的模型评审逻辑可以复用，但外围执行层至少要适配以下内容：</p>
+<table>
+<thead>
+<tr>
+<th>适配点</th>
+<th>需要处理的内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>触发事件</td>
+<td>将 <code>push</code>、<code>pull_request</code> 改为目标平台的 Push、Merge Request 或流水线事件</td>
+</tr>
+<tr>
+<td>代码检出</td>
+<td>确保存在足够的 Git 历史，能够取得父提交并计算 diff</td>
+</tr>
+<tr>
+<td>提交元数据</td>
+<td>将平台变量转换为 <code>COMMIT_PROJECT</code>、<code>COMMIT_BRANCH</code>、<code>COMMIT_AUTHOR</code> 和 <code>COMMIT_MESSAGE</code></td>
+</tr>
+<tr>
+<td>密钥管理</td>
+<td>将 GitHub Secrets 改为目标平台的 Secret、Credential 或 CI Variable</td>
+</tr>
+<tr>
+<td>JAR 分发</td>
+<td>确保 Runner 能下载 Release 资产，或者改用制品库、容器镜像</td>
+</tr>
+<tr>
+<td>仓库认证</td>
+<td>根据平台调整 Token 权限、克隆地址和推送认证方式</td>
+</tr>
+<tr>
+<td>报告链接</td>
+<td>当前链接按 GitHub 的 <code>/blob/master/</code> 结构拼接，其他平台需要重新生成</td>
+</tr>
+</tbody></table>
+<p>还有一个容易忽略的问题：当前评审粒度是“最近一次提交的 diff”，它不一定等于一个 Pull Request 或 Merge Request 的完整变更。迁移平台时最好把“如何选择比较基线”抽成适配接口，分别支持单次提交、两个 SHA 之间的变化，以及整个 PR&#x2F;MR 的变化。</p>
+<h2 id="十二、下一版本：把通知抽象成独立接口"><a href="#十二、下一版本：把通知抽象成独立接口" class="headerlink" title="十二、下一版本：把通知抽象成独立接口"></a>十二、下一版本：把通知抽象成独立接口</h2><p>当前抽象服务直接依赖 <code>WeiXin</code>，主流程也固定调用微信发送方法。这会带来两个问题：不需要通知时仍被迫配置微信参数；新增钉钉、飞书或邮件时，需要修改已有业务流程。</p>
+<p>下一版本可以把通知能力抽象为 <code>INotification</code>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">INotification</span><br><span class="line">├── WeiXinNotification</span><br><span class="line">├── DingTalkNotification</span><br><span class="line">├── FeiShuNotification</span><br><span class="line">├── EmailNotification</span><br><span class="line">└── NoOpNotification</span><br></pre></td></tr></table></figure>
+
+<p>接口不应该直接暴露微信模板的 <code>Map</code> 结构，而应接收一个与渠道无关的消息对象：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">interface</span> <span class="title class_">INotification</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 发送一次代码评审完成通知。</span></span><br><span class="line"><span class="comment">     * 不同渠道负责把统一消息转换为各自需要的请求格式。</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="keyword">void</span> <span class="title function_">send</span><span class="params">(ReviewNotification message)</span> <span class="keyword">throws</span> Exception;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>NoOpNotification</code> 不执行任何外部请求：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title class_">NoOpNotification</span> <span class="keyword">implements</span> <span class="title class_">INotification</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="meta">@Override</span></span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">void</span> <span class="title function_">send</span><span class="params">(ReviewNotification message)</span> &#123;</span><br><span class="line">        <span class="comment">// 明确表示当前关闭通知。评审报告仍会生成并归档。</span></span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>启动时再根据配置选择实现：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">NOTICE_TYPE=none       -&gt; NoOpNotification</span><br><span class="line">NOTICE_TYPE=weixin     -&gt; WeiXinNotification</span><br><span class="line">NOTICE_TYPE=dingtalk   -&gt; DingTalkNotification</span><br><span class="line">NOTICE_TYPE=feishu     -&gt; FeiShuNotification</span><br><span class="line">NOTICE_TYPE=email      -&gt; EmailNotification</span><br></pre></td></tr></table></figure>
+
+<p>默认值可以设为 <code>none</code>。这样不配置通知时就自然使用 <code>NoOpNotification</code>，只生成报告而不发消息；只有选择 <code>weixin</code> 时才校验 <code>WEIXIN_APPID</code>、<code>WEIXIN_SECRET</code>、<code>WEIXIN_TOUSER</code> 和 <code>WEIXIN_TEMPLATE_ID</code>。以后增加新渠道，只需要新增实现类和对应配置，不必修改代码评审的主流程。</p>
+<p>这个改造还可以顺便明确失败策略：</p>
+<ul>
+<li>获取 diff、调用模型或写入报告失败，属于核心流程失败，应该让 CI 返回失败状态。</li>
+<li>通知发送失败，默认只记录错误，不影响已经生成的报告。</li>
+<li>对通知要求严格的团队，可以再增加 <code>NOTICE_FAILURE_STRATEGY=strict</code>，决定是否让通知失败影响流水线。</li>
+</ul>
+<p>这比简单增加几个 <code>if</code> 判断更稳定，也让“代码评审”和“消息触达”成为两个边界清楚的能力。</p>
+<h2 id="十三、当前版本还可以继续改进什么"><a href="#十三、当前版本还可以继续改进什么" class="headerlink" title="十三、当前版本还可以继续改进什么"></a>十三、当前版本还可以继续改进什么</h2><p>除了通知接口，组件下一步还可以从几个方面继续完善：</p>
+<ol>
+<li>将 Git 平台差异抽成接口，不再固定拼接 GitHub 的仓库和报告链接。</li>
+<li>支持指定 base SHA 和 head SHA，准确评审完整 PR&#x2F;MR，而不仅是最近一次提交。</li>
+<li>区分核心流程异常与通知异常，让 CI 状态真实反映评审是否成功。</li>
+<li>对微信等外部接口的响应体做业务错误码校验，并输出更明确的错误信息。</li>
+<li>为不同类型的环境变量增加分组校验，只校验当前启用能力真正需要的配置。</li>
+<li>增加报告大小、diff 大小和敏感文件过滤，避免超长请求或不必要的信息外发。</li>
+</ol>
+<h2 id="十四、总结"><a href="#十四、总结" class="headerlink" title="十四、总结"></a>十四、总结</h2><p><code>openai-code-review</code> 的核心价值，不只是调用一次大模型，而是把“获取变更、生成评审、归档结果、通知开发者”串成了一条可以重复执行的工程流程。</p>
+<p>当前版本借助 GitHub Actions 已经能够以较低成本接入其他 GitHub 仓库：准备日志仓库和 Token，配置模型与微信 Secrets，复制 Workflow，推送代码即可触发。但也要认识到现阶段的边界：执行入口依赖 GitHub Actions，评审对象是最近一次提交，微信参数形式上必填，通知也还没有与主流程解耦。</p>
+<p>下一版本引入 <code>INotification</code> 和 <code>NoOpNotification</code> 后，“不通知”会成为系统正式支持的一种策略；微信、钉钉、飞书和邮件则只是可替换的实现。再进一步抽象 Git 平台和 diff 选择方式，这个组件就能从一个 GitHub Actions 工具，逐渐演进为更通用的自动代码评审基础设施。</p>
+
+      
+    </div>
+
+    
+    
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
     <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/07/09/harness-development-workflow/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -2168,203 +2546,6 @@
   
   
 
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://moyu-yunru.github.io/2026/05/28/llm-architecture-encoder-decoder-notes/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/IMG_1578.jpeg">
-      <meta itemprop="name" content="Libra">
-      <meta itemprop="description" content="记录技术、项目与思考">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Libra's notes">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2026/05/28/llm-architecture-encoder-decoder-notes/" class="post-title-link" itemprop="url">大语言模型基础补充：Encoder-only 与 Decoder-only 到底差在哪</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-
-              <time title="创建时间：2026-05-28 21:45:21" itemprop="dateCreated datePublished" datetime="2026-05-28T21:45:21+08:00">2026-05-28</time>
-            </span>
-              <span class="post-meta-item">
-                <span class="post-meta-item-icon">
-                  <i class="far fa-calendar-check"></i>
-                </span>
-                <span class="post-meta-item-text">更新于</span>
-                <time title="修改时间：2026-06-09 16:41:02" itemprop="dateModified" datetime="2026-06-09T16:41:02+08:00">2026-06-09</time>
-              </span>
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-folder"></i>
-              </span>
-              <span class="post-meta-item-text">分类于</span>
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
-                  <a href="/categories/AI%E4%B8%8EAgent/" itemprop="url" rel="index"><span itemprop="name">AI与Agent</span></a>
-                </span>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>上一篇整理大语言模型基础时，我把重点放在了“从语言模型到 Transformer，再到 Decoder-Only 大模型”这条主线上。后来又想到几个更具体的问题：</p>
-<ol>
-<li>BERT 这种 Encoder-only 架构和 Llama 这种 Decoder-only 架构到底差在哪里？</li>
-<li>自回归模型在训练和 prefill 时都能并行处理整段序列，因果掩码是如何同时保证计算效率和信息不泄露的？</li>
-<li>既然 Encoder 能双向看上下文，为什么今天通用对话模型反而主要是 Decoder-only？</li>
-</ol>
-<p>这些问题很容易混在一起。整理之后，我发现关键不是简单地说“谁更先进”，而是要看它们解决的任务不同。</p>
-<h2 id="一、先把几个容易混淆的点放在前面"><a href="#一、先把几个容易混淆的点放在前面" class="headerlink" title="一、先把几个容易混淆的点放在前面"></a>一、先把几个容易混淆的点放在前面</h2><p>在展开之前，先把几个概念边界放清楚，否则后面很容易把不同架构混在一起。</p>
-<p>第一，BERT 和 Llama 代表的是两条不同路线。BERT 是 Encoder-only 的代表，擅长文本理解和表征；Llama 是 Decoder-only 的代表，擅长自回归生成。但如果细分模型谱系，要注意 RoBERTa 是 Meta 基于 BERT 思路改进的模型，DistilBERT 主要来自 Hugging Face，TinyBERT 来自其他研究团队，它们不能笼统归成 Google 官方版本。</p>
-<p>第二，纯自回归模型也叫 CausalLM。它的核心规则是因果掩码：当前位置只能关注自己和之前的位置。这个规则不只在推理生成时存在，在训练、prefill 和 decode 阶段都存在。</p>
-<p>第三，Decoder-only 模型能利用完整 prompt，并不等于 prompt 里的每个早期 token 都获得了双向上下文。更准确地说，是生成下一个 token 的最后位置可以条件化整段已经输入的 prompt。</p>
-<p>第四，PrefixLM 和 CausalLM 不是一回事。PrefixLM 可以让前缀部分使用类似 Encoder 的双向注意力，再让生成部分使用自回归掩码；但 Llama、Qwen 这类公开资料较多的主流生成模型通常按 CausalLM 来理解，prompt 部分也遵守单向因果掩码。GPT、Claude、Gemini 这类闭源前沿模型不一定公开完整内部结构，但从对话式生成、代码生成和工具调用的外部行为看，也可以先放在“自回归生成范式”下理解。</p>
-<p>第五，“Encoder 不火了”这个说法不准确。Encoder 只是退出了通用聊天模型的中心舞台，但在 Embedding、Rerank、分类、NER、检索、视觉编码、多模态表征等任务中依然很常见。</p>
-<h2 id="二、Encoder-only：为了理解整段输入"><a href="#二、Encoder-only：为了理解整段输入" class="headerlink" title="二、Encoder-only：为了理解整段输入"></a>二、Encoder-only：为了理解整段输入</h2><p>BERT 的核心思路是：如果任务是理解文本，而不是从左到右写文本，那么模型最好能同时看到一个词的左边和右边。</p>
-<p>比如“苹果”这个词：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">我去了苹果店，买了一部新手机。</span><br><span class="line">我去了超市，买了一个红苹果。</span><br></pre></td></tr></table></figure>
-
-<p>如果模型只能从左往右读，读到“苹果”时还不知道后面是“店”还是别的词，就很难立刻判断含义。Encoder-only 架构不使用 causal mask，因此每个 token 都可以和整句里的所有 token 做 self-attention。经过多层 Transformer Encoder 之后，每个位置的输出向量都包含了全局上下文信息。</p>
-<p>BERT 的训练目标是 Masked Language Modeling，也就是完形填空。它会随机选中一部分 token，让模型根据左右上下文预测被遮住的内容。</p>
-<p>这带来了一个很直接的优势：Encoder 生成的是高质量的上下文表征。它很适合做这些任务：</p>
-<ol>
-<li>文本分类：判断情感、意图、主题。</li>
-<li>命名实体识别：找出人名、地名、组织名等。</li>
-<li>句子匹配：判断两段文本是否相似、是否蕴含。</li>
-<li>向量表征：把文本编码成 embedding，用于检索或聚类。</li>
-<li>Rerank：对召回结果做更精细的相关性排序。</li>
-</ol>
-<p>所以 Encoder-only 可以理解为“阅读理解专家”。它不擅长连续开放式生成，但很擅长把输入读透。</p>
-<h2 id="三、Decoder-only：为了持续生成下一个-token"><a href="#三、Decoder-only：为了持续生成下一个-token" class="headerlink" title="三、Decoder-only：为了持续生成下一个 token"></a>三、Decoder-only：为了持续生成下一个 token</h2><p>Decoder-only 的目标更统一：预测下一个 token。</p>
-<p>训练时，模型拿到一段文本：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我 喜欢 吃 苹果</span><br></pre></td></tr></table></figure>
-
-<p>实际优化目标可以理解成：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">看到「我」       -&gt; 预测「喜欢」</span><br><span class="line">看到「我 喜欢」   -&gt; 预测「吃」</span><br><span class="line">看到「我 喜欢 吃」 -&gt; 预测「苹果」</span><br></pre></td></tr></table></figure>
-
-<p>为了提高训练效率，Transformer 不会真的一个 token 一个 token 地串行训练，而是把整个序列一次性送进去并行计算。真正需要解释的是：模型如何在并行计算整段序列的同时，仍然保持“当前位置只能依赖历史信息”的自回归约束？</p>
-<p>关键就在因果掩码。</p>
-<p>注意力矩阵可以想象成这样：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">当前位置 \ 可关注位置    我    喜欢    吃    苹果</span><br><span class="line">我                    可见   屏蔽   屏蔽   屏蔽</span><br><span class="line">喜欢                  可见   可见   屏蔽   屏蔽</span><br><span class="line">吃                    可见   可见   可见   屏蔽</span><br><span class="line">苹果                  可见   可见   可见   可见</span><br></pre></td></tr></table></figure>
-
-<p>这个掩码会在 Softmax 之前把未来位置的注意力分数设成一个极小值，经过 Softmax 后权重接近 0。这样每个位置只能聚合自己及其之前的信息。</p>
-<p>这里还要补一层：模型通常不是用第 t 个位置去预测它自己，而是用第 t 个位置的输出去预测第 t+1 个 token。也就是“标签右移”。这就是 causal language modeling 的基本训练方式。</p>
-<h2 id="四、位置编码不会泄露未来内容"><a href="#四、位置编码不会泄露未来内容" class="headerlink" title="四、位置编码不会泄露未来内容"></a>四、位置编码不会泄露未来内容</h2><p>位置编码只告诉模型“这个 token 在第几个位置”，不告诉模型“后面那个位置的内容是什么”。</p>
-<p>可以把位置编码理解成座位号：</p>
-<ol>
-<li>没有位置编码时，模型很难区分“我 喜欢 吃 苹果”和“苹果 吃 喜欢 我”。</li>
-<li>有位置编码时，模型知道每个 token 的顺序。</li>
-<li>但如果 causal mask 屏蔽了后面的位置，模型仍然拿不到后面 token 的语义内容。</li>
-</ol>
-<p>所以，位置编码解决的是顺序感；因果掩码控制的是信息流方向。两者并不矛盾。</p>
-<h2 id="五、prefill-阶段到底发生了什么"><a href="#五、prefill-阶段到底发生了什么" class="headerlink" title="五、prefill 阶段到底发生了什么"></a>五、prefill 阶段到底发生了什么</h2><p>这个问题最容易混淆。</p>
-<p>假设用户输入：</p>
-<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我去了苹果店，买了一部新手机。请翻译成英文。</span><br></pre></td></tr></table></figure>
-
-<p>Decoder-only 模型在 prefill 阶段会一次性处理整段 prompt。这个“一次性”指的是工程上的并行计算，并不代表注意力变成了双向。</p>
-<p>在纯正的自回归模型中，因果掩码是 Self-Attention 里的硬性规则。无论是训练、prefill，还是 decode，它都不会消失。也就是说：</p>
-<ol>
-<li>处理“我”时，它只能看到“我”。</li>
-<li>处理“苹果”时，它的隐藏状态只能融合“我”“去”“苹果”这些前文信息。</li>
-<li>“苹果”这个位置本身看不到后面的“店”和“手机”。</li>
-</ol>
-<p>所以，早期 token 并不会因为整段 prompt 已经输入了，就突然获得双向上下文。它们依然只能看历史。</p>
-<p>那模型为什么仍然能翻译对？</p>
-<p>因为最终用于预测回答第一个 token 的位置，是 prompt 的末尾位置。这个位置排在整个 prompt 的最后，因此它的 Query 被允许关注前面所有输入 token 的 Key 和 Value。</p>
-<p>换句话说，最后位置的隐藏状态像一个漏斗，会汇聚整段 prompt 中已经出现过的信息。它可以同时关注到“苹果”“店”“新手机”“请翻译成英文”这些位置，然后以这个末尾隐藏状态为基础，生成回答的第一个 token。</p>
-<p>后续生成出来的每一个新 token，也都会排在序列更靠后的位置，因此它们同样能看到完整 prompt 和此前已经生成的内容。</p>
-<p>换句话说：</p>
-<ol>
-<li>早期 token 的表示不是双向的。</li>
-<li>生成答案的当前位置可以看到完整 prompt。</li>
-<li>Decoder-only 的“理解整段输入”，主要体现在输出位置对整段历史的条件化上。</li>
-</ol>
-<p>这和 Encoder-only 的双向表征不是一回事。Encoder 是每个 token 都能同时看左右上下文；Decoder 是每个位置只能看历史，但当 prompt 已经完整输入后，末尾生成位置的历史已经包含整段 prompt。</p>
-<p>这里也可以顺手区分一下 PrefixLM。PrefixLM 会把输入分成“前缀区”和“生成区”：前缀区内部可以使用双向注意力，生成区再使用自回归注意力。因此，PrefixLM 中 prompt 部分确实可能获得类似 Encoder 的全局视野。但 CausalLM 不这样做。在 Llama、GPT、Qwen 这类主流自回归模型里，即使是 prompt 部分，也严格遵守单向因果掩码。</p>
-<h2 id="六、为什么通用大模型主要走-Decoder-only"><a href="#六、为什么通用大模型主要走-Decoder-only" class="headerlink" title="六、为什么通用大模型主要走 Decoder-only"></a>六、为什么通用大模型主要走 Decoder-only</h2><p>既然 Encoder 能双向看上下文，为什么 ChatGPT、Llama、Qwen、Claude、Gemini 这类通用模型主要表现为自回归生成？</p>
-<p>我现在的理解是，原因主要有四个。</p>
-<p>第一，生成任务天然匹配自回归。聊天、写作、代码生成、工具调用计划，本质上都可以统一成“基于已有上下文生成下一步”。Decoder-only 的训练目标和使用方式非常一致。</p>
-<p>第二，预训练数据利用方式简单。互联网上有海量无标注文本，直接做 next token prediction 就可以训练，不需要人工标注任务标签。</p>
-<p>第三，模型规模扩大后，next token prediction 会逼迫模型学习很多隐含结构。为了预测后文，模型需要学习语法、事实、常识、代码模式、推理模板和人类表达习惯。不能说它一定形成了真正的人类式理解，但这个目标确实非常适合规模化。</p>
-<p>第四，自回归模型很适合上下文学习。给它几个示例，它可以顺着上下文继续生成符合格式的答案。这让很多任务不必每次都微调模型。当然，“不必每次微调”不等于“微调被淘汰”。在特定领域、稳定格式、高一致性要求的场景里，微调、RAG、工具调用和评估流程仍然很重要。</p>
-<p>所以 Decoder-only 不是因为它在所有方面都比 Encoder 更好，而是因为它更适合做一个统一的生成接口。</p>
-<h2 id="七、Encoder-现在仍然有价值"><a href="#七、Encoder-现在仍然有价值" class="headerlink" title="七、Encoder 现在仍然有价值"></a>七、Encoder 现在仍然有价值</h2><p>Encoder 不是过时了，而是分工变了。</p>
-<p>在很多工程系统里，Encoder 仍然很适合承担“理解、编码、排序、对齐”的角色。例如：</p>
-<ol>
-<li>向量检索：用 embedding 模型把文档和查询编码成向量。</li>
-<li>语义排序：用 cross-encoder 或 reranker 精排候选结果。</li>
-<li>分类抽取：对短文本做意图识别、实体识别、风险分类。</li>
-<li>多模态系统：用视觉 encoder 把图像变成可供语言模型使用的特征。</li>
-<li>RAG 系统：检索、召回、重排、去重这些环节经常依赖 encoder 或 encoder-like 模型。</li>
-</ol>
-<p>如果把 Decoder-only 看成负责“表达和行动”的模型，那么 Encoder 更像负责“读懂和压缩输入”的模型。Agent 系统里，这两类能力经常是一起出现的。</p>
-<h2 id="八、模型谱系的简要记法"><a href="#八、模型谱系的简要记法" class="headerlink" title="八、模型谱系的简要记法"></a>八、模型谱系的简要记法</h2><p>为了后面复习方便，我把常见模型按架构和生成范式粗略记一下。这里需要先加一个时间戳：本文写于 2026-05-28，前沿模型更新很快，下面只按当时公开资料记录，不把没有公开的内部结构说死。</p>
-<p>Encoder-only 代表：</p>
-<ol>
-<li>BERT-Base：12 层 Encoder，约 110M 参数。</li>
-<li>BERT-Large：24 层 Encoder，约 340M 参数。</li>
-<li>mBERT、Chinese BERT：Google 官方多语言和中文版本。</li>
-<li>RoBERTa、ALBERT、DistilBERT、TinyBERT：BERT 思路下的改进、压缩或训练策略变化，需要注意它们不都来自 Google。</li>
-</ol>
-<p>典型 Decoder-only &#x2F; CausalLM 代表：</p>
-<ol>
-<li>Llama 系列：Meta 的开源权重大模型路线，从 Llama 1 到 Llama 3.x，再到 Llama 4 引入 MoE 和原生多模态。</li>
-<li>Qwen、DeepSeek、Mistral 等：许多开源或开放权重的通用生成模型，也主要采用 Decoder-only 或以自回归生成作为核心输出机制。</li>
-<li>GPT 系列：公开资料中，GPT-4 是 Transformer-style、next-token prediction 路线。到 GPT-5、GPT-5.5 之后，OpenAI 更强调“统一系统”“reasoning”“agentic coding”“computer use”等产品能力；因此可以把它们按生成式自回归范式理解，但不应在没有官方公开细节时断言完整内部架构。</li>
-</ol>
-<p>截至 2026-05-28，几个更新的闭源前沿模型可以这样记：</p>
-<ol>
-<li>GPT-5.5 &#x2F; GPT-5.5 Pro：OpenAI 在 2026-04-23 发布，强调 agentic coding、知识工作、科研分析、工具使用和 Codex 场景。包括我现在使用的 Codex 这类 GPT 系列产品，也可以先按“基于上下文持续生成下一步，并结合工具完成任务”的范式来理解；但具体内部结构仍以官方公开资料为准。</li>
-<li>Claude Opus 4.7：Anthropic 在 2026-04-16 发布，定位在复杂软件工程、长程多步骤任务、视觉理解和 Agent 工作流。Claude 的完整内部架构同样不是公开教材级信息，因此博客里更适合写“前沿生成式 &#x2F; hybrid reasoning 模型”，而不是武断归类成某个纯粹结构。</li>
-<li>Gemini 3.1 Pro &#x2F; Gemini 3.5 Flash：Google 在 2026 年继续推进 Gemini 3 系列，3.1 Pro 面向复杂推理和多模态任务，I&#x2F;O 2026 又推出 3.5 Flash，强调速度和 agentic workflows。Gemini 从一开始就是多模态模型族，实际系统里通常还会包含视觉、音频、工具和检索等组件。</li>
-</ol>
-<p>Llama 系列里有几个节点值得记：</p>
-<ol>
-<li>Llama 1：7B、13B、33B、65B，主要面向研究。</li>
-<li>Llama 2：7B、13B、70B，加入 Chat 版本和更明确的商用许可。</li>
-<li>Llama 3：8B、70B，训练数据和 tokenizer 都有明显升级。</li>
-<li>Llama 3.1：8B、70B、405B，上下文窗口提升到 128K，并强化多语言和工具使用能力。</li>
-<li>Llama 3.2：加入 1B、3B 轻量文本模型，以及 11B、90B 视觉模型。</li>
-<li>Llama 4：Scout 和 Maverick 是 MoE、原生多模态模型；Scout 是 17B active、16 experts、109B total，并支持 10M 级上下文。Maverick 是 17B active、128 experts、400B total。Behemoth 在发布时是预览中的教师模型。</li>
-</ol>
-<h2 id="九、最后的理解"><a href="#九、最后的理解" class="headerlink" title="九、最后的理解"></a>九、最后的理解</h2><p>这次补充让我对“模型架构”这件事少了一点二选一的执念。</p>
-<p>Encoder-only 的核心是双向理解，它把输入压缩成高质量表征。Decoder-only 的核心是自回归生成，它把已有上下文不断延展成新的内容。一个更像阅读理解，一个更像连续写作。</p>
-<p>今天通用大模型主要表现为生成式自回归范式，并不代表 Encoder 没价值。真正做应用时，尤其是 Agent 或 RAG 系统，经常需要两者协作：Encoder 负责把资料找准、排好、压缩好，生成模型负责根据上下文推理、生成、调用工具和解释结果。</p>
-<p>所以我后续再看 Agent 架构时，会更关注一个问题：系统里的每一步到底是在做“理解与检索”，还是在做“生成与行动”。这个区分，比单纯记住某个模型名字更有用。</p>
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
 
   
   <nav class="pagination">
@@ -2436,7 +2617,7 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">14</span>
+          <span class="site-state-item-count">15</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
@@ -2449,7 +2630,7 @@
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">33</span>
+        <span class="site-state-item-count">36</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
@@ -2492,7 +2673,7 @@
 </div>
 
 <div class="libra-footer-extra">
-  <span>共撰写了 14 篇文章</span>
+  <span>共撰写了 15 篇文章</span>
   <span>博客已运行 <span id="libra-site-runtime" data-start="2026-05-22T00:00:00+08:00">计算中</span></span>
 </div>
 
